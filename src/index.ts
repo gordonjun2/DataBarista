@@ -10,6 +10,9 @@ import {
 import { createNodePlugin } from "@elizaos/plugin-node";
 //import { solanaPlugin } from "@elizaos/plugin-solana";
 import { dkgPlugin } from "@elizaos/plugin-dkg";
+//import { matchmakerPlugin } from "./plugin-matchmaker/src/index.ts";
+import { professionalProfileEvaluator } from "./professionalProfileEvaluator.ts";
+import { publishIntentDkg } from "./publishIntentDkgAction.ts";
 import fs from "fs";
 import net from "net";
 import path from "path";
@@ -24,6 +27,7 @@ import {
   parseArguments,
 } from "./config/index.ts";
 import { initializeDatabase } from "./database/index.ts";
+import bootstrapPlugin from "@elizaos/plugin-bootstrap";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,11 +58,11 @@ export function createAgent(
     databaseAdapter: db,
     token,
     modelProvider: character.modelProvider,
-    evaluators: [],
+    evaluators: [professionalProfileEvaluator],
     character,
-    plugins: [dkgPlugin].filter(Boolean),
+    plugins: [bootstrapPlugin].filter(Boolean),
     providers: [],
-    actions: [],
+    actions: [publishIntentDkg],
     services: [],
     managers: [],
     cacheManager: cache,
