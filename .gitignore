@@ -32,6 +32,8 @@ Thumbs.db
 dist
 !index.ts
 !character.ts
+!professionalProfileEvaluator.ts
+!publishIntentDkgAction.ts
 
 db.sqlite
 .tee-cloud
