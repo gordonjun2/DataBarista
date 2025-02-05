@@ -34,6 +34,8 @@ dist
 !character.ts
 !professionalProfileEvaluator.ts
 !publishIntentDkgAction.ts
+!serendipityAction.ts
+!continueAction.ts
 
 db.sqlite
 .tee-cloud
