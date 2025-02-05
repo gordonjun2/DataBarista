@@ -150,7 +150,7 @@ Output an empty array if no new information found: [{}]`;
 export const professionalProfileEvaluator: Evaluator = {
     name: "professionalProfileEvaluator",
     similes: ["EXTRACT_PROFESSIONAL_PROFILE", "GET_NETWORKING_PREFERENCES", "ANALYZE_BACKGROUND"],
-    description: "Extracts and maintains professional profile information through stateful conversation processing",
+    description: "Extracts and maintains professional profile information through stateful conversation processing. Choose this evaluator ONLY if there are new information about user's goals and professional background present in the last message.",
 
     validate: async (runtime: IAgentRuntime, message: Memory, state?: State): Promise<boolean> => {
         try {

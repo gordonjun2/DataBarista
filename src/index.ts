@@ -13,6 +13,8 @@ import { dkgPlugin } from "@elizaos/plugin-dkg";
 //import { matchmakerPlugin } from "./plugin-matchmaker/src/index.ts";
 import { professionalProfileEvaluator } from "./professionalProfileEvaluator.ts";
 import { publishIntentDkg } from "./publishIntentDkgAction.ts";
+import { serendipity } from "./serendipityAction.ts";
+import { continueAction } from "./continueAction.ts";
 import fs from "fs";
 import net from "net";
 import path from "path";
@@ -60,9 +62,9 @@ export function createAgent(
     modelProvider: character.modelProvider,
     evaluators: [professionalProfileEvaluator],
     character,
-    plugins: [bootstrapPlugin].filter(Boolean),
+    plugins: [].filter(Boolean),
     providers: [],
-    actions: [publishIntentDkg],
+    actions: [publishIntentDkg, serendipity, continueAction],
     services: [],
     managers: [],
     cacheManager: cache,
