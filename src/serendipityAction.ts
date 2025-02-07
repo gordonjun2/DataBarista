@@ -10,7 +10,7 @@ import {
 } from "@elizaos/core";
 // @ts-ignore
 import DKG from "dkg.js";
-import type { UserProfileCache } from './professionalProfileEvaluator';
+//import type { UserProfileCache } from './professionalProfileEvaluator';
 
 let DkgClient: any = null;
 

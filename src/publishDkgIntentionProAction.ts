@@ -12,78 +12,65 @@ import {
 } from "@elizaos/core";
 // @ts-ignore
 import DKG from "dkg.js";
-import { v4 as uuidv4 } from 'uuid';
-import type { UUID } from 'crypto';
-import type { UserProfileCache } from './professionalProfileEvaluator';
+import type { UserIntentionCache } from './intentionProEvaluator';
 
 let DkgClient: any = null;
 
 const KGExtractionTemplate = `
-TASK: Transform extracted profile data into valid schema.org/FOAF compliant JSON-LD
+TASK: Transform extracted intention data into valid schema.org/FOAF compliant JSON-LD
 
-Extracted Profile Data:
-{{profile}}
+Intentions Data:
+{{intentionsData}}
 
 Format response as array of public/private JSON-LD pairs:
 [
   {
     "public": {
-      "@context": ["http://schema.org", "http://xmlns.com/foaf/0.1/", {
-        "datalatte": "http://datalatte.com/ns#"
-      }],
-      "@type": "Person",
-      "@id": "urn:uuid:{{uuid}}",
-      "datalatte:intention": {
-        "@type": "datalatte:Intention",
-        "datalatte:goalType": "{{intention.type}}",
-        "description": "{{intention.description}}",
-        "datalatte:preferences": {
-          {{#with intention.preferences}}
-          {{#if requiredSkills}} "seeks": ["{{#each requiredSkills}}"{{this}}"{{#unless @last}},{{/unless}}{{/each}}]" {{/if}}
-          {{#if preferredIndustries}} "industryPreference": ["{{#each preferredIndustries}}"{{this}}"{{#unless @last}},{{/unless}}{{/each}}]" {{/if}}
-          {{/with}}
-        }
+      "@context": {
+        "schema": "http://schema.org/",
+        "datalatte": "https://datalatte.com/ns/"
+      },
+      "@id": "{{uuid}}",
+      "@type": "datalatte:ProIntention",
+      "schema:description": "{{description}}",
+      "datalatte:intentionDirection": "{{direction}}",
+      "datalatte:intentionType": "{{type}}",
+      "datalatte:preferences": {
+        "datalatte:requiredSkills": {{requiredSkills}},
+        "datalatte:preferredIndustries": {{preferredIndustries}},
+        "datalatte:experienceLevel": "{{experienceLevel}}",
+        "datalatte:remotePreference": "{{remotePreference}}",
+        "datalatte:contractType": "{{contractType}}",
+        "datalatte:companySize": "{{companySize}}"
       }
     },
     "private": {
-      "@context": ["http://schema.org", "http://xmlns.com/foaf/0.1/"],
-      "@type": "Person",
-      "@id": "urn:uuid:{{uuid}}",
-      {{#with personal}}
-        {{#if currentPosition}}
-        "jobTitle": "{{currentPosition.title}}",
-        "worksFor": {
-          "@type": "Organization",
-          "name": "{{currentPosition.company}}"
-        },
-        {{/if}}
-        "skills": [
-          {{#each skills}}"{{this}}"{{#unless @last}},{{/unless}}{{/each}}
-        ],
-        "homeLocation": [
-          {{#each locations}}{
-            "@type": "Place",
-            "name": "{{this}}"
-          }{{#unless @last}},{{/unless}}{{/each}}
-        ]
-      {{/with}},
-      "account": {
-        "@type": "OnlineAccount",
-        "name": "{{onlineAccount.username}}",
-        "identifier": {
-          "@type": "PropertyValue",
-          "propertyID": "{{onlineAccount.platform}}",
-          "value": "{{onlineAccount.username}}"
-        }
-      }
+      "@context": {
+        "schema": "http://schema.org/",
+        "datalatte": "https://datalatte.com/ns/"
+      },
+      "@id": "{{uuid}}",
+      "@type": "datalatte:ProIntention",
+      "datalatte:budget": {
+        "datalatte:amount": {{budget.amount}},
+        "datalatte:currency": "{{budget.currency}}",
+        "datalatte:frequency": "{{budget.frequency}}"
+      },
+      "datalatte:timeline": {
+        "datalatte:startDate": "{{timeline.startDate}}",
+        "datalatte:flexibility": "{{timeline.flexibility}}"
+      },
+      "datalatte:urgency": "{{urgency}}"
     }
   }
-]`;
+]
+- exclude any field from the output if results is null/empty
+`;
 
-export const publishIntentDkg: Action = {
-    name: "PUBLISH_INTENT_DKG",
-    similes: ["PUBLISH_TO_DKG", "SAVE_TO_DKG", "STORE_IN_DKG"],
-    description: "Publishes professional profile and intent information to the OriginTrail Decentralized Knowledge Graph",
+export const publishDkgIntentionProAction: Action = {
+    name: "PUBLISH_DKG_INTENTION",
+    similes: ["PUBLISH_INTENTION_TO_DKG", "SAVE_INTENTION_TO_DKG", "STORE_INTENTION_IN_DKG"],
+    description: "Publishes professional intentions to the OriginTrail Decentralized Knowledge Graph",
     
     validate: async (runtime: IAgentRuntime, _message: Memory) => {
         const requiredEnvVars = [
@@ -135,36 +122,51 @@ export const publishIntentDkg: Action = {
                 });
             }
 
-            // Try to get profile from state first
-            let profile = state.currentProfile;
-            
-            // If not in state, try to get from cache
-            if (!profile) {
-                const username = state?.senderName || message.userId;
-                const cacheKey = `${runtime.character.name}/${username}/data`;
-                const cached = await runtime.cacheManager.get<UserProfileCache>(cacheKey);
-                profile = cached?.data;
-            }
+            const username = state?.senderName || message.userId;
 
-            if (!profile) {
-                elizaLogger.error("No profile found in state or cache");
+            // Get intentions from cache
+            const intentionCache = await runtime.cacheManager.get<UserIntentionCache>("intentions");
+            const intentions = intentionCache?.intentions || [];
+
+            if (intentions.length === 0) {
+                elizaLogger.error("No intentions found in cache");
                 return false;
             }
 
-            // Generate JSON-LD
+            elizaLogger.info("Retrieved data for DKG publishing", {
+                intentionsCount: intentions.length,
+                username,
+                userId: message.userId
+            });
+
+            if (!state) {
+                state = await runtime.composeState(message);
+            }
+
+            // Add stringified data to state
+            state.intentionsData = JSON.stringify(intentions, null, 2);
+            state.uuid = message.userId;
+
+            elizaLogger.info("Generating JSON-LD with context data:", {
+                intentionsCount: intentions?.length || 0,
+                userId: message.userId
+            });
+
             const context = composeContext({
                 template: KGExtractionTemplate,
-                state: {
-                    ...state,
-                    profile: JSON.stringify(profile, null, 2),
-                    uuid: uuidv4() as UUID
-                }
+                state
             });
 
             const jsonLdArray = await generateObjectArray({
                 runtime,
                 context,
                 modelClass: ModelClass.LARGE
+            });
+
+            elizaLogger.info("Generation result:", {
+                hasResult: !!jsonLdArray,
+                arrayLength: jsonLdArray?.length || 0,
+                firstItem: jsonLdArray?.[0] ? JSON.stringify(jsonLdArray[0]).substring(0, 200) + "..." : "no items"
             });
 
             if (!jsonLdArray || jsonLdArray.length === 0) {
@@ -174,13 +176,17 @@ export const publishIntentDkg: Action = {
 
             const { public: publicJsonLd, private: privateJsonLd } = jsonLdArray[0];
 
-            elizaLogger.info("Generated JSON-LD for DKG:", {
-                public: publicJsonLd,
-                private: privateJsonLd
+            elizaLogger.info("=== Generated JSON-LD for DKG ===");
+            elizaLogger.info("Public JSON-LD:", {
+                data: publicJsonLd
             });
+            elizaLogger.info("Private JSON-LD:", {
+                data: JSON.stringify(privateJsonLd, null, 2)
+            });
+            elizaLogger.info("================================");
 
             // Publish to DKG
-            elizaLogger.info("Publishing profile to DKG with client config:", {
+            elizaLogger.info("Publishing to DKG with client config:", {
                 environment: runtime.getSetting("DKG_ENVIRONMENT"),
                 endpoint: runtime.getSetting("DKG_HOSTNAME"),
                 port: runtime.getSetting("DKG_PORT"),
@@ -200,15 +206,15 @@ export const publishIntentDkg: Action = {
                 );
 
                 elizaLogger.info("DKG asset creation request completed successfully");
-                elizaLogger.info("=== Personal Knowledge Asset Created ===");
+                elizaLogger.info("=== Knowledge Asset Created ===");
                 elizaLogger.info(`UAL: ${createAssetResult.UAL}`);
                 elizaLogger.info(`DKG Explorer Link: ${runtime.getSetting("DKG_ENVIRONMENT") === 'mainnet' ?
                                 'https://dkg.origintrail.io/explore?ual=' :
                                 'https://dkg-testnet.origintrail.io/explore?ual='}${createAssetResult.UAL}`);
-                elizaLogger.info("==========================================");
+                elizaLogger.info("===============================");
 
                 callback({
-                    text: `Successfully published your professional profile to DKG!\nView it here: ${runtime.getSetting("DKG_ENVIRONMENT") === 'mainnet' ?
+                    text: `Successfully published your professional intentions to DKG!\nView it here: ${runtime.getSetting("DKG_ENVIRONMENT") === 'mainnet' ?
                           'https://dkg.origintrail.io/explore?ual=' :
                           'https://dkg-testnet.origintrail.io/explore?ual='}${createAssetResult.UAL}`
                 });
@@ -234,7 +240,7 @@ export const publishIntentDkg: Action = {
             }
 
         } catch (error) {
-            elizaLogger.error("Error in publishIntentDkg handler:", error);
+            elizaLogger.error("Error in publishDkgIntention handler:", error);
             return false;
         }
     },
@@ -244,23 +250,23 @@ export const publishIntentDkg: Action = {
             {
                 user: "{{user1}}",
                 content: {
-                    text: "publish my profile to dkg",
-                    action: "PUBLISH_INTENT_DKG",
+                    text: "publish my intentions to dkg",
+                    action: "PUBLISH_DKG_INTENTION",
                 },
             },
             {
                 user: "{{user2}}",
-                content: { text: "Your profile has been published to DKG" },
+                content: { text: "Your intentions have been published to DKG" },
             },
         ],
         [
             {
                 user: "{{user1}}",
-                content: { text: "save my profile to dkg", action: "PUBLISH_INTENT_DKG" },
+                content: { text: "save my intentions to dkg", action: "PUBLISH_DKG_INTENTION" },
             },
             {
                 user: "{{user2}}",
-                content: { text: "Profile saved successfully to DKG" },
+                content: { text: "Intentions saved successfully to DKG" },
             },
         ]
     ] as ActionExample[][],

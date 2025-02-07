@@ -65,12 +65,18 @@ importers:
       dkg.js:
         specifier: 8.0.4
         version: 8.0.4(@nomicfoundation/hardhat-ethers@3.0.8(ethers@5.7.2(bufferutil@4.0.9)(utf-8-validate@5.0.10))(hardhat@2.22.18(bufferutil@4.0.9)(ts-node@10.9.2(@types/node@20.17.16)(typescript@5.6.3))(typescript@5.6.3)(utf-8-validate@5.0.10)))(@types/node@20.17.16)(bufferutil@4.0.9)(utf-8-validate@5.0.10)(web-streams-polyfill@3.3.3)
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.4.7
       fs:
         specifier: 0.0.1-security
         version: 0.0.1-security
       net:
         specifier: 1.0.2
         version: 1.0.2
+      node-fetch:
+        specifier: ^3.3.2
+        version: 3.3.2
       path:
         specifier: 0.12.7
         version: 0.12.7

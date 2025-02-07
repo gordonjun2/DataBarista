@@ -31,11 +31,12 @@ Thumbs.db
 *.ts
 dist
 !index.ts
-!character.ts
-!professionalProfileEvaluator.ts
-!publishIntentDkgAction.ts
+!publishDkgIntentionProAction.ts
+!publishDkgProfileProAction.ts
 !serendipityAction.ts
 !continueAction.ts
+!intentionProEvaluator.ts
+!profileProEvaluator.ts
 
 db.sqlite
 .tee-cloud
