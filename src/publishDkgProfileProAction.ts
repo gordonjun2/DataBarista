@@ -126,7 +126,7 @@ Format response as public/private JSON-LD pair:
       "foaf": "http://xmlns.com/foaf/0.1/",
       "datalatte": "https://datalatte.com/ns/"
     },
-    "@id": "{{uuid}}",
+    "@id": "urn:uuid:{{uuid}}",
     "@type": "schema:Person"
   },
   "private": {
@@ -135,7 +135,7 @@ Format response as public/private JSON-LD pair:
       "foaf": "http://xmlns.com/foaf/0.1/",
       "datalatte": "https://datalatte.com/ns/"
     },
-    "@id": "{{uuid}}",
+    "@id": "urn:uuid:{{uuid}}",
     "@type": "schema:Person",
     "schema:description": "{{description}}",
     "schema:hasOccupation": {
@@ -158,8 +158,8 @@ Format response as public/private JSON-LD pair:
       "datalatte:noticePeriod": "{{availability.noticePeriod}}"
     },
     "foaf:account": {
-    "foaf:accountServiceHomepage": {{platformAccounts.platform}},
-    "foaf:accountName": {{platformAccounts.username}}
+      "foaf:accountServiceHomepage": {{platformAccounts.platform}},
+      "foaf:accountName": {{platformAccounts.username}}
     }
   }
 }`;

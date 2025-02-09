@@ -16,11 +16,43 @@ import type { UserIntentionCache } from './intentionProEvaluator';
 
 let DkgClient: any = null;
 
+// SPARQL query to find existing intentions for a user
+const EXISTING_INTENTIONS_QUERY = `
+PREFIX schema: <http://schema.org/>
+PREFIX datalatte: <https://datalatte.com/ns/>
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+
+SELECT DISTINCT ?intent ?description ?direction ?type ?preferences
+WHERE {
+    ?person a schema:Person ;
+            foaf:account ?account .
+    ?account a foaf:OnlineAccount ;
+             foaf:accountServiceHomepage "{{platform}}" ;
+             foaf:accountName "{{username}}" .
+    ?person datalatte:hasIntent ?intent .
+    ?intent a datalatte:proIntent ;
+            schema:description ?description ;
+            datalatte:intentDirection ?direction ;
+            datalatte:intentType ?type .
+    OPTIONAL {
+        ?intent datalatte:hasPreferences ?preferences .
+    }
+}`;
+
 const KGExtractionTemplate = `
-TASK: Transform extracted intention data into valid schema.org/FOAF compliant JSON-LD
+TASK: Transform extracted intention data into valid schema.org/FOAF compliant JSON-LD, considering existing intentions
 
 Intentions Data:
 {{intentionsData}}
+
+Existing Intentions in DKG:
+{{existingIntentions}}
+
+Guidelines:
+1. If an intention with the same ID exists, only output fields that are new or updated
+2. If no fields are new or updated, return an empty array
+3. Use the existing intention IDs when updating
+4. Maintain all existing relationships and properties not being updated
 
 Format response as array of public/private JSON-LD pairs:
 [
@@ -31,7 +63,7 @@ Format response as array of public/private JSON-LD pairs:
         "datalatte": "https://datalatte.com/ns/"
       },
       "@type": "datalatte:proIntent",
-      "@id": {{intentid}},
+      "@id": "urn:intent:{{intentid}}",
       "schema:description": "{{description}}",
       "datalatte:intentDirection": "{{direction}}",
       "datalatte:intentType": "{{type}}",
@@ -51,7 +83,7 @@ Format response as array of public/private JSON-LD pairs:
         "foaf": "http://xmlns.com/foaf/0.1/"
       },
       "@type": "schema:Person",
-      "@id": "{{uuid}}",
+      "@id": "urn:uuid:{{uuid}}",
       "foaf:account": {
         "@type": "foaf:OnlineAccount",
         "foaf:accountServiceHomepage": "{{platform}}",
@@ -59,7 +91,7 @@ Format response as array of public/private JSON-LD pairs:
       },
       "datalatte:hasIntent": {
         "@type": "datalatte:proIntent",
-        "@id": {{intentid}},
+        "@id": urn:intent:{{intentid}},
         "datalatte:budget": {
           "datalatte:amount": {{budget.amount}},
           "datalatte:currency": "{{budget.currency}}",
@@ -75,6 +107,7 @@ Format response as array of public/private JSON-LD pairs:
   }
 ]
 - exclude any field from the output if results is null/empty
+- if no new or updated fields, return []
 `;
 
 export const publishDkgIntentionProAction: Action = {
@@ -137,7 +170,6 @@ export const publishDkgIntentionProAction: Action = {
             // Get platform type from client similar to profileProEvaluator
             const clients = runtime.clients;
             const client = Object.values(clients)[0];
-            // Match the platform name with what we use in profileProEvaluator
             let platform = client?.constructor?.name?.replace('ClientInterface', '').toLowerCase();
             if (platform?.endsWith('client')) {
                 platform = platform.replace('client', '');
@@ -148,6 +180,33 @@ export const publishDkgIntentionProAction: Action = {
                 platform,
                 clientType: client?.constructor?.name
             });
+
+            // First, check for existing intentions in DKG
+            const existingIntentionsQuery = EXISTING_INTENTIONS_QUERY
+                .replace("{{platform}}", platform)
+                .replace("{{username}}", username);
+
+            elizaLogger.info("Querying for existing intentions:", {
+                query: existingIntentionsQuery
+            });
+
+            let existingIntentions;
+            try {
+                // Add a small delay to allow for DKG indexing if needed
+                await new Promise(resolve => setTimeout(resolve, 5000));
+
+                const queryResult = await DkgClient.graph.query(existingIntentionsQuery, "SELECT");
+                elizaLogger.info("Existing intentions query result:", {
+                    status: queryResult.status,
+                    dataLength: queryResult.data?.length,
+                    data: queryResult.data
+                });
+
+                existingIntentions = queryResult.data;
+            } catch (error) {
+                elizaLogger.error("Error querying existing intentions:", error);
+                existingIntentions = [];
+            }
 
             // Get intentions from cache
             const intentionCache = await runtime.cacheManager.get<UserIntentionCache>("intentions");
@@ -169,17 +228,19 @@ export const publishDkgIntentionProAction: Action = {
                 username,
                 userId: message.userId,
                 intentionId: latestIntention.id,
-                platform
+                platform,
+                existingIntentionsCount: existingIntentions?.length || 0
             });
 
             if (!state) {
                 state = await runtime.composeState(message);
             }
 
-            // Add stringified data, intention ID, and platform info to state
+            // Add data to state including existing intentions
             state.intentionsData = JSON.stringify(latestIntention, null, 2);
+            state.existingIntentions = JSON.stringify(existingIntentions || [], null, 2);
             state.uuid = message.userId;
-            state.intentid = `"${latestIntention.id}"`;  // Wrap in quotes for JSON-LD format
+            state.intentid = latestIntention.id;
             state.platform = platform;
             state.username = username;
 
@@ -187,7 +248,8 @@ export const publishDkgIntentionProAction: Action = {
                 intentionsCount: intentions?.length || 0,
                 userId: message.userId,
                 platform,
-                username
+                username,
+                hasExistingIntentions: existingIntentions?.length > 0
             });
 
             const context = composeContext({
@@ -207,9 +269,13 @@ export const publishDkgIntentionProAction: Action = {
                 firstItem: jsonLdArray?.[0] ? JSON.stringify(jsonLdArray[0]).substring(0, 200) + "..." : "no items"
             });
 
+            // If no new or updated fields, don't publish
             if (!jsonLdArray || jsonLdArray.length === 0) {
-                elizaLogger.warn("Failed to generate JSON-LD for DKG");
-                return false;
+                elizaLogger.info("No new or updated fields to publish");
+                callback({
+                    text: "Your intention is already up to date in the DKG. No changes needed!"
+                });
+                return true;
             }
 
             const { public: publicJsonLd, private: privateJsonLd } = jsonLdArray[0];

@@ -68,7 +68,7 @@ export function createAgent(
     character,
     plugins: [].filter(Boolean),
     providers: [],
-    actions: [continueAction, publishDkgAction],
+    actions: [continueAction, publishDkgIntentionProAction],
     services: [],
     managers: [],
     cacheManager: cache,

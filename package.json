@@ -10,7 +10,8 @@
     "start:service:all": "pm2 start pnpm --name=\"all\" --restart-delay=3000 --max-restarts=10 -- run start:all",
     "stop:service:all": "pm2 stop all",
     "simulation": "tsc && node --loader ts-node/esm src/simulateConversations.ts",
-    "simPublishDkg": "tsc && node --loader ts-node/esm src/simPublishDkg.ts"
+    "simPublishDkg": "tsc && node --loader ts-node/esm src/simPublishDkg.ts",
+    "simQueryDkg": "tsc && node --loader ts-node/esm src/simQueryDkg.ts"
   },
   "dependencies": {
     "node-fetch": "^3.3.2",
