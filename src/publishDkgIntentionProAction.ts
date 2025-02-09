@@ -30,12 +30,12 @@ Format response as array of public/private JSON-LD pairs:
         "schema": "http://schema.org/",
         "datalatte": "https://datalatte.com/ns/"
       },
-      "@id": "{{uuid}}",
-      "@type": "datalatte:ProIntention",
+      "@type": "datalatte:proIntent",
+      "@id": {{intentid}},
       "schema:description": "{{description}}",
-      "datalatte:intentionDirection": "{{direction}}",
-      "datalatte:intentionType": "{{type}}",
-      "datalatte:preferences": {
+      "datalatte:intentDirection": "{{direction}}",
+      "datalatte:intentType": "{{type}}",
+      "datalatte:hasPreferences": {
         "datalatte:requiredSkills": {{requiredSkills}},
         "datalatte:preferredIndustries": {{preferredIndustries}},
         "datalatte:experienceLevel": "{{experienceLevel}}",
@@ -47,20 +47,30 @@ Format response as array of public/private JSON-LD pairs:
     "private": {
       "@context": {
         "schema": "http://schema.org/",
-        "datalatte": "https://datalatte.com/ns/"
+        "datalatte": "https://datalatte.com/ns/",
+        "foaf": "http://xmlns.com/foaf/0.1/"
       },
+      "@type": "schema:Person",
       "@id": "{{uuid}}",
-      "@type": "datalatte:ProIntention",
-      "datalatte:budget": {
-        "datalatte:amount": {{budget.amount}},
-        "datalatte:currency": "{{budget.currency}}",
-        "datalatte:frequency": "{{budget.frequency}}"
+      "foaf:account": {
+        "@type": "foaf:OnlineAccount",
+        "foaf:accountServiceHomepage": "{{platform}}",
+        "foaf:accountName": "{{username}}"
       },
-      "datalatte:timeline": {
-        "datalatte:startDate": "{{timeline.startDate}}",
-        "datalatte:flexibility": "{{timeline.flexibility}}"
-      },
-      "datalatte:urgency": "{{urgency}}"
+      "datalatte:hasIntent": {
+        "@type": "datalatte:proIntent",
+        "@id": {{intentid}},
+        "datalatte:budget": {
+          "datalatte:amount": {{budget.amount}},
+          "datalatte:currency": "{{budget.currency}}",
+          "datalatte:frequency": "{{budget.frequency}}"
+        },
+        "datalatte:timeline": {
+          "datalatte:startDate": "{{timeline.startDate}}",
+          "datalatte:flexibility": "{{timeline.flexibility}}"
+        },
+        "datalatte:urgency": "{{urgency}}"
+      }
     }
   }
 ]
@@ -123,6 +133,21 @@ export const publishDkgIntentionProAction: Action = {
             }
 
             const username = state?.senderName || message.userId;
+            
+            // Get platform type from client similar to profileProEvaluator
+            const clients = runtime.clients;
+            const client = Object.values(clients)[0];
+            // Match the platform name with what we use in profileProEvaluator
+            let platform = client?.constructor?.name?.replace('ClientInterface', '').toLowerCase();
+            if (platform?.endsWith('client')) {
+                platform = platform.replace('client', '');
+            }
+
+            elizaLogger.info("User platform details:", {
+                username,
+                platform,
+                clientType: client?.constructor?.name
+            });
 
             // Get intentions from cache
             const intentionCache = await runtime.cacheManager.get<UserIntentionCache>("intentions");
@@ -133,23 +158,36 @@ export const publishDkgIntentionProAction: Action = {
                 return false;
             }
 
+            // NOTE: Currently we're getting the latest intention (last in array) by default.
+            // In future implementations, this intention ID will be fed from other functions
+            // that specify which intention to publish. For now, we assume the user wants
+            // to publish their most recent intention.
+            const latestIntention = intentions[intentions.length - 1];
+            
             elizaLogger.info("Retrieved data for DKG publishing", {
                 intentionsCount: intentions.length,
                 username,
-                userId: message.userId
+                userId: message.userId,
+                intentionId: latestIntention.id,
+                platform
             });
 
             if (!state) {
                 state = await runtime.composeState(message);
             }
 
-            // Add stringified data to state
-            state.intentionsData = JSON.stringify(intentions, null, 2);
+            // Add stringified data, intention ID, and platform info to state
+            state.intentionsData = JSON.stringify(latestIntention, null, 2);
             state.uuid = message.userId;
+            state.intentid = `"${latestIntention.id}"`;  // Wrap in quotes for JSON-LD format
+            state.platform = platform;
+            state.username = username;
 
             elizaLogger.info("Generating JSON-LD with context data:", {
                 intentionsCount: intentions?.length || 0,
-                userId: message.userId
+                userId: message.userId,
+                platform,
+                username
             });
 
             const context = composeContext({

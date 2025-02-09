@@ -157,7 +157,10 @@ Format response as public/private JSON-LD pair:
       "datalatte:hoursPerWeek": {{availability.hoursPerWeek}},
       "datalatte:noticePeriod": "{{availability.noticePeriod}}"
     },
-    "foaf:account": {{accounts}}
+    "foaf:account": {
+    "foaf:accountServiceHomepage": {{platformAccounts.platform}},
+    "foaf:accountName": {{platformAccounts.username}}
+    }
   }
 }`;
 
