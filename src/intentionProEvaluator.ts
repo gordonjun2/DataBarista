@@ -10,6 +10,7 @@ interface UserIntention {
         | "consulting" | "speaking_opportunity" | "project_partnership";
     direction: "seeking" | "offering";
     description: string;
+    url?: string; // Optional URL/link related to the intention
     preferences: {
         requiredSkills?: string[];
         preferredSkills?: string[];
@@ -82,6 +83,7 @@ Format response as array of objects following this schema:
             | "consulting" | "speaking_opportunity" | "project_partnership",
         "direction": "seeking" | "offering",
         "description": string,
+        "url": string, // URL/link mentioned in the message if any
         "preferences": {
             "requiredSkills"?: string[],
             "preferredSkills"?: string[],

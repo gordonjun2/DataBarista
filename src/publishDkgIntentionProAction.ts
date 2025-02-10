@@ -65,6 +65,7 @@ Format response as array of public/private JSON-LD pairs:
       "@type": "datalatte:proIntent",
       "@id": "urn:intent:{{intentid}}",
       "schema:description": "{{description}}",
+      "schema:url": "{{url}}",
       "datalatte:intentDirection": "{{direction}}",
       "datalatte:intentType": "{{type}}",
       "datalatte:hasPreferences": {
@@ -256,6 +257,20 @@ export const publishDkgIntentionProAction: Action = {
                 template: KGExtractionTemplate,
                 state
             });
+
+            elizaLogger.info("=== Full KG Extraction Template Prompt ===");
+            elizaLogger.info("Template:", {
+                fullPrompt: context,
+                stateData: {
+                    intentionsData: state.intentionsData,
+                    existingIntentions: state.existingIntentions,
+                    uuid: state.uuid,
+                    intentid: state.intentid,
+                    platform: state.platform,
+                    username: state.username
+                }
+            });
+            elizaLogger.info("=====================================");
 
             const jsonLdArray = await generateObjectArray({
                 runtime,
