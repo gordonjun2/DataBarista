@@ -5,19 +5,19 @@ import {
   settings,
   stringToUuid,
   type Character,
+  type IAgentRuntime,
+  type Memory,
+  type State,
+  type HandlerCallback,
 } from "@elizaos/core";
 //import { bootstrapPlugin } from "@elizaos/plugin-bootstrap";
 import { createNodePlugin } from "@elizaos/plugin-node";
 //import { solanaPlugin } from "@elizaos/plugin-solana";
-//import { dkgPlugin } from "@elizaos/plugin-dkg";
-//import { matchmakerPlugin } from "./plugin-matchmaker/src/index.ts";
-import { profileProEvaluator } from "./profileProEvaluator.ts";
-import { intentionProEvaluator } from "./intentionProEvaluator.ts";
-import { publishDkgAction } from "./publishDkgAction.ts";
-import { publishDkgIntentionProAction } from "./publishDkgIntentionProAction.ts";
-import { publishDkgProfileProAction } from "./publishDkgProfileProAction.ts";
+
+import { publishIntent2Dkg } from "./publishProIntent2Dkg.ts";
 //import { serendipity } from "./serendipityAction.ts";
 import { continueAction } from "./continueAction.ts";
+import { userProfileProvider } from "./userProfileProvider.ts";
 import fs from "fs";
 import net from "net";
 import path from "path";
@@ -32,7 +32,6 @@ import {
   parseArguments,
 } from "./config/index.ts";
 import { initializeDatabase } from "./database/index.ts";
-//import { publishDkgAction } from "./publishDkgAction.ts";
 //import bootstrapPlugin from "@elizaos/plugin-bootstrap";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -64,11 +63,11 @@ export function createAgent(
     databaseAdapter: db,
     token,
     modelProvider: character.modelProvider,
-    evaluators: [profileProEvaluator, intentionProEvaluator],
+    evaluators: [],
     character,
     plugins: [].filter(Boolean),
-    providers: [],
-    actions: [continueAction, publishDkgIntentionProAction],
+    providers: [userProfileProvider],
+    actions: [continueAction, publishIntent2Dkg],
     services: [],
     managers: [],
     cacheManager: cache,
