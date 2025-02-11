@@ -11,24 +11,11 @@ PREFIX datalatte: <https://datalatte.com/ns/>
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 
-CONSTRUCT {
-    ?person rdf:type schema:Person ;
-            schema:name ?name ;
-            schema:description ?description ;
-            schema:jobTitle ?role ;
-            schema:worksFor ?company ;
-            schema:employmentStatus ?status ;
-            schema:knowsAbout ?expertise ;
-            datalatte:hasIntent ?intent .
-            
-    ?intent rdf:type datalatte:proIntent ;
-            schema:description ?intentDesc ;
-            datalatte:intentDirection ?direction ;
-            datalatte:intentType ?type ;
-            datalatte:urgency ?urgency ;
-            datalatte:locationPreference ?location ;
-            datalatte:budget ?budget .
-}
+SELECT ?person ?name ?description ?role ?company ?status ?expertise ?intent 
+       (MAX(?intentDesc) AS ?latestDesc)
+       (MAX(?intentDir) AS ?latestDir)
+       (MAX(?intentType) AS ?latestType)
+       (GROUP_CONCAT(?prefs; SEPARATOR=",") AS ?allPrefs)
 WHERE {
     ?person rdf:type schema:Person ;
             foaf:account ?account .
@@ -45,15 +32,17 @@ WHERE {
     
     OPTIONAL {
         ?person datalatte:hasIntent ?intent .
-        ?intent rdf:type datalatte:proIntent ;
-                schema:description ?intentDesc .
-        OPTIONAL { ?intent datalatte:intentDirection ?direction }
-        OPTIONAL { ?intent datalatte:intentType ?type }
-        OPTIONAL { ?intent datalatte:urgency ?urgency }
-        OPTIONAL { ?intent datalatte:locationPreference ?location }
-        OPTIONAL { ?intent datalatte:budget ?budget }
+        ?intent rdf:type datalatte:intent ;
+                datalatte:intentCategory "professional" ;
+                schema:description ?intentDesc ;
+                datalatte:intentDirection ?intentDir ;
+                datalatte:intentType ?intentType .
+        OPTIONAL { ?intent datalatte:hasPreferences ?prefs }
     }
-}`;
+}
+GROUP BY ?person ?name ?description ?role ?company ?status ?expertise ?intent
+ORDER BY DESC(?intent)
+`;
 
 const userProfileProvider: Provider = {
     get: async (runtime: IAgentRuntime, message: Memory, state?: State): Promise<string | null> => {
@@ -99,12 +88,12 @@ const userProfileProvider: Provider = {
 
             let userData;
             try {
-                const queryResult = await DkgClient.graph.query(userDataQuery, "CONSTRUCT");
+                const queryResult = await DkgClient.graph.query(userDataQuery, "SELECT");
                 elizaLogger.info("User data query result:", {
                     status: queryResult.status,
                     data: queryResult.data
                 });
-
+                
                 userData = queryResult.data;
             } catch (error) {
                 elizaLogger.error("Error querying user data:", error);
@@ -112,7 +101,7 @@ const userProfileProvider: Provider = {
             }
 
             // If no data found
-            if (!userData || Object.keys(userData).length === 0) {
+            if (!userData || userData.length === 0) {
                 return `No profile information found in DKG for @${username} on ${platform}.`;
             }
 

@@ -14,8 +14,8 @@ import {
 import { createNodePlugin } from "@elizaos/plugin-node";
 //import { solanaPlugin } from "@elizaos/plugin-solana";
 
-import { publishIntent2Dkg } from "./publishProIntent2Dkg.ts";
-//import { serendipity } from "./serendipityAction.ts";
+import { publishProIntent2Dkg } from "./publishProIntent2Dkg.ts";
+import { serendipity } from "./serendipityAction.ts";
 import { continueAction } from "./continueAction.ts";
 import { userProfileProvider } from "./userProfileProvider.ts";
 import fs from "fs";
@@ -67,7 +67,7 @@ export function createAgent(
     character,
     plugins: [].filter(Boolean),
     providers: [userProfileProvider],
-    actions: [continueAction, publishIntent2Dkg],
+    actions: [serendipity, publishProIntent2Dkg],
     services: [],
     managers: [],
     cacheManager: cache,

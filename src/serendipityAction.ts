@@ -19,55 +19,49 @@ const USER_PROFILE_QUERY = `
 PREFIX schema: <http://schema.org/>
 PREFIX datalatte: <https://datalatte.com/ns/>
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 
-SELECT DISTINCT ?person ?intentType ?direction ?description ?preferences
+SELECT ?userUri ?intentId ?intentType ?intentDirection ?intentDescription
 WHERE {
-    ?person a schema:Person ;
+    ?userUri rdf:type schema:Person ;
             foaf:account ?account .
     ?account a foaf:OnlineAccount ;
              foaf:accountServiceHomepage "{{platform}}" ;
              foaf:accountName "{{username}}" .
-    ?person datalatte:hasIntent ?intent .
-    ?intent a datalatte:intent ;
-            datalatte:intentType ?intentType ;
-            datalatte:intentDirection ?direction ;
-            schema:description ?description .
-    OPTIONAL {
-        ?intent datalatte:hasPreferences ?preferences .
-    }
+    ?userUri datalatte:hasIntent ?intentId .
+    ?intentId rdf:type datalatte:intent ;
+              datalatte:intentCategory "professional" ;
+              schema:description ?intentDescription ;
+              datalatte:intentDirection ?intentDirection ;
+              datalatte:intentType ?intentType .
 }
-LIMIT 1`;
+ORDER BY DESC(?intentId)
+LIMIT 1`;  // Get only the latest intent
 
-// SPARQL query to find matching profiles based on intention type with opposite direction
+// SPARQL query to find matching profiles based on intention type with appropriate direction matching
 const MATCHING_PROFILES_QUERY = `
 PREFIX schema: <http://schema.org/>
 PREFIX datalatte: <https://datalatte.com/ns/>
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 
-SELECT DISTINCT ?person ?intentType ?direction ?description ?skills ?industries ?experienceLevel ?remotePreference ?contractType ?companySize
+SELECT DISTINCT ?personUri ?intentId ?intentDescription ?intentDirection ?intentType
 WHERE {
-    ?person a schema:Person ;
-            datalatte:hasIntent ?intent .
-    ?intent a datalatte:intent ;
-            datalatte:intentType ?intentType ;
-            datalatte:intentDirection ?direction ;
-            schema:description ?description .
+    ?personUri rdf:type schema:Person ;
+              datalatte:hasIntent ?intentId .
+    ?intentId rdf:type datalatte:intent ;
+              datalatte:intentCategory "professional" ;
+              schema:description ?intentDescription ;
+              datalatte:intentDirection ?intentDirection ;
+              datalatte:intentType ?intentType .
     
-    OPTIONAL {
-        ?intent datalatte:hasPreferences ?prefs .
-        ?prefs datalatte:requiredSkills ?skills ;
-               datalatte:preferredIndustries ?industries ;
-               datalatte:experienceLevel ?experienceLevel ;
-               datalatte:remotePreference ?remotePreference ;
-               datalatte:contractType ?contractType ;
-               datalatte:companySize ?companySize .
-    }
+    # Match intention type - handle both quoted and unquoted values
+    FILTER(REPLACE(str(?intentType), '"', '') = "networking")
     
-    # Match intention type and ensure opposite direction
-    FILTER(?intentType = "{{intentType}}")
-    FILTER(?direction != "{{userDirection}}")
-    FILTER(?person != <{{userUri}}>)
+    # Don't match with self
+    FILTER(?personUri != <{{userUri}}>)
 }
+ORDER BY DESC(?intentId)
 LIMIT 10`;
 
 export const serendipity: Action = {
@@ -125,11 +119,11 @@ export const serendipity: Action = {
                 });
             }
 
-            // Get username and platform type
             const username = state?.senderName || message.userId;
+            
+            // Get platform type from client
             const clients = runtime.clients;
             const client = Object.values(clients)[0];
-            // Match the platform name with what we use in professionalProfileEvaluator
             let platform = client?.constructor?.name?.replace('ClientInterface', '').toLowerCase();
             if (platform?.endsWith('client')) {
                 platform = platform.replace('client', '');
@@ -138,17 +132,8 @@ export const serendipity: Action = {
             elizaLogger.info("User details from runtime:", {
                 username,
                 platform,
-                clientType: client?.constructor?.name,
-                originalPlatform: client?.constructor?.name?.replace('ClientInterface', '').toLowerCase()
+                clientType: client?.constructor?.name
             });
-
-            if (!platform) {
-                elizaLogger.error("Could not determine platform type from client");
-                callback({
-                    text: "I encountered an error while trying to find your profile. Please try again later."
-                });
-                return false;
-            }
 
             // First, find the user's profile in DKG
             const userProfileQuery = USER_PROFILE_QUERY
@@ -163,19 +148,18 @@ export const serendipity: Action = {
 
             let userProfileResult;
             try {
-                // Add a small delay to allow DKG indexing
-                elizaLogger.info("Waiting for DKG indexing...");
-                await new Promise(resolve => setTimeout(resolve, 5000));
+                // Add a small delay to allow for DKG indexing
+                //elizaLogger.info("Waiting for DKG indexing...");
+                //await new Promise(resolve => setTimeout(resolve, 5000));
 
                 elizaLogger.info("Executing user profile query...");
                 userProfileResult = await DkgClient.graph.query(userProfileQuery, "SELECT");
                 elizaLogger.info("User profile query result:", {
                     status: userProfileResult.status,
-                    dataLength: userProfileResult.data?.length,
                     data: userProfileResult.data
                 });
 
-                if (!userProfileResult.data?.length) {
+                if (!userProfileResult.data || !userProfileResult.data.length) {
                     elizaLogger.warn("No user profile found in DKG");
                     callback({
                         text: "I couldn't find your profile in the network yet. Please make sure you've published your profile using the 'publish to dkg' command and wait a few moments for it to be indexed."
@@ -183,37 +167,49 @@ export const serendipity: Action = {
                     return false;
                 }
 
-                const userProfile = userProfileResult.data[0];
-                elizaLogger.info("Found user profile in DKG:", {
-                    person: userProfile.person,
-                    intentType: userProfile.intentType,
-                    direction: userProfile.direction,
-                    description: userProfile.description
+                // Get the first (latest) result
+                const latestResult = userProfileResult.data[0];
+                const userUri = latestResult.userUri;
+                const latestIntent = {
+                    id: latestResult.intentId,
+                    type: latestResult.intentType.replace(/^"|"$/g, ''),
+                    direction: latestResult.intentDirection.replace(/^"|"$/g, ''),
+                    description: latestResult.intentDescription.replace(/^"|"$/g, '')
+                };
+
+                elizaLogger.info("Found latest intent:", {
+                    userUri,
+                    latestIntent
                 });
 
-                const userUri = userProfile.person;
-                const intentType = userProfile.intentType;
-                const userDirection = userProfile.direction;
+                if (!latestIntent || !userUri) {
+                    elizaLogger.warn("No intent or user URI found", {
+                        intentFound: !!latestIntent,
+                        userUriFound: !!userUri,
+                        rawData: JSON.stringify(userProfileResult.data)
+                    });
+                    callback({
+                        text: "I couldn't find your profile information. Please try publishing your intention first."
+                    });
+                    return false;
+                }
 
-                // Now search for matching profiles with opposite direction
+                // Now search for matching profiles using the latest intent
                 const matchingProfilesQuery = MATCHING_PROFILES_QUERY
-                    .replace("{{intentType}}", intentType)
-                    .replace("{{userDirection}}", userDirection)
                     .replace("{{userUri}}", userUri);
 
                 elizaLogger.info("Generated matching profiles query:", {
-                    query: matchingProfilesQuery
+                    query: matchingProfilesQuery,
+                    userUri
                 });
 
-                elizaLogger.info("Executing matching profiles query...");
                 const matchingProfilesResult = await DkgClient.graph.query(matchingProfilesQuery, "SELECT");
                 elizaLogger.info("Matching profiles query result:", {
                     status: matchingProfilesResult.status,
-                    dataLength: matchingProfilesResult.data?.length,
                     data: matchingProfilesResult.data
                 });
 
-                if (!matchingProfilesResult.data?.length) {
+                if (!matchingProfilesResult.data || !matchingProfilesResult.data.length) {
                     elizaLogger.info("No matching profiles found");
                     callback({
                         text: "I couldn't find any matching profiles in the network yet. I'll keep looking!"
@@ -221,39 +217,16 @@ export const serendipity: Action = {
                     return true;
                 }
 
-                // Format results for display
-                const matches = matchingProfilesResult.data.map((match: any) => ({
-                    intentType: match.intentType,
-                    direction: match.direction,
-                    description: match.description,
-                    skills: match.skills,
-                    industries: match.industries,
-                    experienceLevel: match.experienceLevel,
-                    remotePreference: match.remotePreference,
-                    contractType: match.contractType,
-                    companySize: match.companySize
-                }));
-
-                elizaLogger.info("Formatted matches:", {
-                    matchCount: matches.length,
-                    matches
-                });
-
-                const matchSummary = matches.map((match: any, index: number) => 
-                    `Match ${index + 1}:\n` +
-                    `Intent Type: ${match.intentType}\n` +
-                    `Direction: ${match.direction}\n` +
-                    `Description: ${match.description}\n` +
-                    (match.skills ? `Skills: ${match.skills}\n` : "") +
-                    (match.industries ? `Industries: ${match.industries}\n` : "") +
-                    (match.experienceLevel ? `Experience Level: ${match.experienceLevel}\n` : "") +
-                    (match.remotePreference ? `Remote Preference: ${match.remotePreference}\n` : "") +
-                    (match.contractType ? `Contract Type: ${match.contractType}\n` : "") +
-                    (match.companySize ? `Company Size: ${match.companySize}` : "")
-                ).join("\n\n");
+                // Format matches for display
+                const matchSummary = matchingProfilesResult.data
+                    .map((match, index) => 
+                        `Match ${index + 1}:\n` +
+                        `Direction: ${match.intentDirection.replace(/^"|"$/g, '')}${match.intentDirection.replace(/^"|"$/g, '') === "bidirectional" ? " (open to both seeking and offering)" : ""}\n` +
+                        `Description: ${match.intentDescription.replace(/^"|"$/g, '')}`
+                    ).join("\n\n");
 
                 callback({
-                    text: `I found ${matches.length} potential matches!\n\n${matchSummary}`
+                    text: `I found ${matchingProfilesResult.data.length} potential matches!\n\n${matchSummary}`
                 });
 
                 return true;

@@ -21,21 +21,25 @@ PREFIX schema: <http://schema.org/>
 PREFIX datalatte: <https://datalatte.com/ns/>
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
 
-SELECT DISTINCT ?intent ?description ?direction ?type ?preferences
+SELECT ?intent ?description ?direction ?type
 WHERE {
-  ?person a schema:Person ;
-          foaf:account ?account .
-  ?account a foaf:OnlineAccount ;
-           foaf:accountServiceHomepage "{{platform}}" ;
-           foaf:accountName "{{username}}" .
-  ?person datalatte:hasIntent ?intent .
-  ?intent a datalatte:intent ;
-          datalatte:intentCategory "professional" ;
-          schema:description ?description ;
-          datalatte:intentDirection ?direction ;
-          datalatte:intentType ?type .
-  OPTIONAL {
-    ?intent datalatte:hasPreferences ?preferences .
+  {
+    SELECT ?intent (SAMPLE(?description) as ?description) (SAMPLE(?direction) as ?direction) (SAMPLE(?type) as ?type)
+    WHERE {
+      ?person a schema:Person ;
+              foaf:account ?account .
+      ?account a foaf:OnlineAccount ;
+               foaf:accountServiceHomepage "{{platform}}" ;
+               foaf:accountName "{{username}}" .
+      ?person datalatte:hasIntent ?intent .
+      ?intent a datalatte:intent ;
+              datalatte:intentCategory "professional" ;
+              schema:description ?description ;
+              datalatte:intentDirection ?direction ;
+              datalatte:intentType ?type .
+    }
+    GROUP BY ?intent
+    ORDER BY DESC(?intent)
   }
 }`;
 
@@ -83,12 +87,18 @@ SHACL Shapes for Validation:
         "networking",
         "collaboration",
         "hiring",
+        "jobSearch",
         "funding",
-        "startup_growth",
-        "skill_development",
+        "investment",
+        "startupGrowth",
+        "skillDevelopment",
         "consulting",
-        "speaking_opportunity",
-        "project_partnership"
+        "speakingOpportunity",
+        "projectPartnership",
+        "businessDevelopment",
+        "coaching",
+        "professionalTraining",
+        "advisory"
       ],
       "sh:minCount": 1,
       "sh:maxCount": 1
@@ -154,6 +164,7 @@ Guidelines:
 4. All fields must match their defined datatypes and value constraints
 5. Required fields (description, intentDirection, intentType, intentCategory) must be present
 6. Budget and timeline information should be extracted if present in conversation
+7. Some "intentionTypes" has ONLY bidirectional "intentDirection" such as "networking", "collaboration", "projectPartnership"
 
 Format response as array:
 [
@@ -464,23 +475,26 @@ export const publishProIntent2Dkg: Action = {
       {
         user: "{{user1}}",
         content: {
-          text: "publish my professional intention to DKG",
+          text: "I'd prefer to work with professionals from the US or Canada, especially those with a background in Ethereum.",
           action: "PUBLISH_DKG_INTENT_PROFESSIONAL",
         },
       },
       {
-        user: "{{user2}}",
-        content: { text: "Your professional intention has been published to DKG" },
+        user: "DataBarista",
+        content: { text: "Great! Your intent has been published on DKG: https://dkg.origintrail.io/explore?ual={UAL} (SERENDIPITY)" },
       },
     ],
     [
       {
         user: "{{user1}}",
-        content: { text: "save my professional intention to DKG", action: "PUBLISH_DKG_INTENT_PROFESSIONAL" },
+        content: {
+          text: "One more detail: I'm looking for professionals with a background in risk management and smart contract auditing.",
+          action: "PUBLISH_DKG_INTENT_PROFESSIONAL",
+        },
       },
       {
-        user: "{{user2}}",
-        content: { text: "Professional intention saved successfully to DKG" },
+        user: "DataBarista",
+        content: { text: "Great! Your intent has been published on DKG: https://dkg.origintrail.io/explore?ual={UAL} (SERENDIPITY)"},
       },
     ]
   ] as ActionExample[][],
