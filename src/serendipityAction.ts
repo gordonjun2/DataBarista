@@ -16,36 +16,56 @@ let DkgClient: any = null;
 
 // SPARQL query to find a user's profile by their platform account
 const USER_PROFILE_QUERY = `
-SELECT DISTINCT ?person ?goalType ?description
+PREFIX schema: <http://schema.org/>
+PREFIX datalatte: <https://datalatte.com/ns/>
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+
+SELECT DISTINCT ?person ?intentType ?direction ?description ?preferences
 WHERE {
-    ?person a <http://schema.org/Person> ;
-            <http://schema.org/account> ?account .
-    ?account a <http://schema.org/OnlineAccount> ;
-             <http://schema.org/identifier> ?identifier .
-    ?identifier <http://schema.org/propertyID> "{{platform}}" ;
-                <http://schema.org/value> "{{username}}" .
-    ?person <http://datalatte.com/ns#intention> ?intention .
-    ?intention <http://datalatte.com/ns#goalType> ?goalType ;
-               <http://schema.org/description> ?description .
+    ?person a schema:Person ;
+            foaf:account ?account .
+    ?account a foaf:OnlineAccount ;
+             foaf:accountServiceHomepage "{{platform}}" ;
+             foaf:accountName "{{username}}" .
+    ?person datalatte:hasIntent ?intent .
+    ?intent a datalatte:intent ;
+            datalatte:intentType ?intentType ;
+            datalatte:intentDirection ?direction ;
+            schema:description ?description .
+    OPTIONAL {
+        ?intent datalatte:hasPreferences ?preferences .
+    }
 }
 LIMIT 1`;
 
-// SPARQL query to find matching profiles based on intention type
+// SPARQL query to find matching profiles based on intention type with opposite direction
 const MATCHING_PROFILES_QUERY = `
-SELECT DISTINCT ?person ?goalType ?description ?skills ?industries
+PREFIX schema: <http://schema.org/>
+PREFIX datalatte: <https://datalatte.com/ns/>
+PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+
+SELECT DISTINCT ?person ?intentType ?direction ?description ?skills ?industries ?experienceLevel ?remotePreference ?contractType ?companySize
 WHERE {
-    ?person a <http://schema.org/Person> ;
-            <http://datalatte.com/ns#intention> ?intention .
-    ?intention <http://datalatte.com/ns#goalType> ?goalType ;
-               <http://schema.org/description> ?description .
+    ?person a schema:Person ;
+            datalatte:hasIntent ?intent .
+    ?intent a datalatte:intent ;
+            datalatte:intentType ?intentType ;
+            datalatte:intentDirection ?direction ;
+            schema:description ?description .
     
     OPTIONAL {
-        ?intention <http://datalatte.com/ns#preferences> ?prefs .
-        ?prefs <http://schema.org/seeks> ?skills ;
-               <http://schema.org/industryPreference> ?industries .
+        ?intent datalatte:hasPreferences ?prefs .
+        ?prefs datalatte:requiredSkills ?skills ;
+               datalatte:preferredIndustries ?industries ;
+               datalatte:experienceLevel ?experienceLevel ;
+               datalatte:remotePreference ?remotePreference ;
+               datalatte:contractType ?contractType ;
+               datalatte:companySize ?companySize .
     }
     
-    FILTER(?goalType = "{{goalType}}")
+    # Match intention type and ensure opposite direction
+    FILTER(?intentType = "{{intentType}}")
+    FILTER(?direction != "{{userDirection}}")
     FILTER(?person != <{{userUri}}>)
 }
 LIMIT 10`;
@@ -166,16 +186,19 @@ export const serendipity: Action = {
                 const userProfile = userProfileResult.data[0];
                 elizaLogger.info("Found user profile in DKG:", {
                     person: userProfile.person,
-                    goalType: userProfile.goalType,
+                    intentType: userProfile.intentType,
+                    direction: userProfile.direction,
                     description: userProfile.description
                 });
 
                 const userUri = userProfile.person;
-                const goalType = userProfile.goalType;
+                const intentType = userProfile.intentType;
+                const userDirection = userProfile.direction;
 
-                // Now search for matching profiles
+                // Now search for matching profiles with opposite direction
                 const matchingProfilesQuery = MATCHING_PROFILES_QUERY
-                    .replace("{{goalType}}", goalType)
+                    .replace("{{intentType}}", intentType)
+                    .replace("{{userDirection}}", userDirection)
                     .replace("{{userUri}}", userUri);
 
                 elizaLogger.info("Generated matching profiles query:", {
@@ -200,10 +223,15 @@ export const serendipity: Action = {
 
                 // Format results for display
                 const matches = matchingProfilesResult.data.map((match: any) => ({
-                    goalType: match.goalType,
+                    intentType: match.intentType,
+                    direction: match.direction,
                     description: match.description,
                     skills: match.skills,
-                    industries: match.industries
+                    industries: match.industries,
+                    experienceLevel: match.experienceLevel,
+                    remotePreference: match.remotePreference,
+                    contractType: match.contractType,
+                    companySize: match.companySize
                 }));
 
                 elizaLogger.info("Formatted matches:", {
@@ -213,10 +241,15 @@ export const serendipity: Action = {
 
                 const matchSummary = matches.map((match: any, index: number) => 
                     `Match ${index + 1}:\n` +
-                    `Goal: ${match.goalType}\n` +
+                    `Intent Type: ${match.intentType}\n` +
+                    `Direction: ${match.direction}\n` +
                     `Description: ${match.description}\n` +
-                    (match.skills ? `Skills: ${match.skills.join(", ")}\n` : "") +
-                    (match.industries ? `Industries: ${match.industries.join(", ")}` : "")
+                    (match.skills ? `Skills: ${match.skills}\n` : "") +
+                    (match.industries ? `Industries: ${match.industries}\n` : "") +
+                    (match.experienceLevel ? `Experience Level: ${match.experienceLevel}\n` : "") +
+                    (match.remotePreference ? `Remote Preference: ${match.remotePreference}\n` : "") +
+                    (match.contractType ? `Contract Type: ${match.contractType}\n` : "") +
+                    (match.companySize ? `Company Size: ${match.companySize}` : "")
                 ).join("\n\n");
 
                 callback({
@@ -249,25 +282,15 @@ export const serendipity: Action = {
     examples: [
         [
             {
-                user: "{{user1}}",
+                user: "DataBarista",
                 content: {
-                    text: "find me someone with similar interests",
+                    text: "I just published your intent on DKG! You can view it here: https://dkg.origintrail.io/explore?ual={UAL}",
                     action: "SERENDIPITY",
                 },
             },
             {
-                user: "{{user2}}",
-                content: { text: "I found several profiles that match your interests!" },
-            },
-        ],
-        [
-            {
-                user: "{{user1}}",
-                content: { text: "search for matching profiles", action: "SERENDIPITY" },
-            },
-            {
-                user: "{{user2}}",
-                content: { text: "Here are some profiles that align with your goals..." },
+                user: "DataBarista",
+                content: { text: "I found {{user2}} that match your interests! Would you like introductions?" },
             },
         ]
     ] as ActionExample[][],

@@ -28,6 +28,11 @@ build/
 ehthumbs.db
 Thumbs.db
 
+/characters/databarista.character.json
+characters/databarista.character.json
+/characters/databarista_TG.character.json
+characters/databarista_TG.character.json
+
 *.ts
 dist
 !index.ts

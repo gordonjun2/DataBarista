@@ -72,7 +72,7 @@ SHACL Shapes for Validation:
     },
     {
       "sh:path": "datalatte:intentDirection",
-      "sh:in": ["seeking", "offering"],
+      "sh:in": ["seeking", "offering", "bidirectional"],
       "sh:minCount": 1,
       "sh:maxCount": 1
     },
@@ -82,7 +82,6 @@ SHACL Shapes for Validation:
         "mentorship",
         "networking",
         "collaboration",
-        "seeking_job",
         "hiring",
         "funding",
         "startup_growth",
@@ -173,7 +172,7 @@ Format response as array:
       "@id": "urn:intent:{{intentid}}",
       "schema:description": "<extract from conversation>",
       "schema:url": "<extract URL if mentioned>",
-      "datalatte:intentDirection": "<seeking|offering>",
+      "datalatte:intentDirection": "<seeking|offering|bidirectional>",
       "datalatte:intentType": "<one of the allowed types>",
       "datalatte:intentCategory": "professional",
       "datalatte:hasPreferences": {
@@ -436,7 +435,7 @@ export const publishProIntent2Dkg: Action = {
         elizaLogger.info("===============================");
 
         callback({
-          text: `Successfully published your professional intention to DKG!\nView it here: ${
+          text: `Successfully published your professional intent to DKG!\nView it here: ${
             runtime.getSetting("DKG_ENVIRONMENT") === "mainnet"
               ? "https://dkg.origintrail.io/explore?ual="
               : "https://dkg-testnet.origintrail.io/explore?ual="
