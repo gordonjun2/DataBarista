@@ -17,29 +17,86 @@ let DkgClient: any = null;
 
 // SPARQL query to find existing professional intentions for a user
 const EXISTING_INTENTIONS_QUERY = `
-PREFIX schema: <http://schema.org/>
+PREFIX schema:    <http://schema.org/>
 PREFIX datalatte: <https://datalatte.com/ns/>
-PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+PREFIX foaf:      <http://xmlns.com/foaf/0.1/>
+PREFIX rdf:       <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 
-SELECT ?intent ?description ?direction ?type
+SELECT ?person ?name ?background ?knowledgeDomain ?privateDetails ?personTimestamp
+       ?latestIntent ?intentTimestamp ?summary ?allDesiredConnections ?projDesc ?challenge ?url ?relatedProject
+       ?latestProject ?projectTimestamp ?projectName ?projectDescriptionFull ?projectType ?projectDomain ?projectTechStack
 WHERE {
+  # Person info
   {
-    SELECT ?intent (SAMPLE(?description) as ?description) (SAMPLE(?direction) as ?direction) (SAMPLE(?type) as ?type)
+    SELECT ?person 
+           (MAX(?pTs) AS ?personTimestamp)
+           (MAX(?nameVal) AS ?name)
+           (MAX(?bg) AS ?background)
+           (MAX(?kd) AS ?knowledgeDomain)
+           (MAX(?pd) AS ?privateDetails)
     WHERE {
-      ?person a schema:Person ;
+      ?person rdf:type foaf:Person ;
               foaf:account ?account .
       ?account a foaf:OnlineAccount ;
                foaf:accountServiceHomepage "{{platform}}" ;
                foaf:accountName "{{username}}" .
-      ?person datalatte:hasIntent ?intent .
-      ?intent a datalatte:intent ;
-              datalatte:intentCategory "professional" ;
-              schema:description ?description ;
-              datalatte:intentDirection ?direction ;
-              datalatte:intentType ?type .
+      OPTIONAL { ?person foaf:name ?nameVal. }
+      OPTIONAL { ?person datalatte:background ?bg. }
+      OPTIONAL { ?person datalatte:knowledgeDomain ?kd. }
+      OPTIONAL { ?person datalatte:privateDetails ?pd. }
+      OPTIONAL { ?person datalatte:revisionTimestamp ?pTs. }
     }
-    GROUP BY ?intent
-    ORDER BY DESC(?intent)
+    GROUP BY ?person
+  }
+  
+  # Latest Intent Timestamp per person
+  OPTIONAL {
+    SELECT ?person (MAX(?it) AS ?intentTimestamp)
+    WHERE {
+      ?person datalatte:hasIntent ?i .
+      ?i rdf:type datalatte:Intent ;
+         datalatte:intentCategory "professional" ;
+         datalatte:revisionTimestamp ?it .
+    }
+    GROUP BY ?person
+  }
+  
+  # Latest Intent details joined on that timestamp
+  OPTIONAL {
+    ?person datalatte:hasIntent ?latestIntent .
+    ?latestIntent rdf:type datalatte:Intent ;
+                  datalatte:intentCategory "professional" ;
+                  datalatte:revisionTimestamp ?intentTimestamp . 
+    OPTIONAL { ?latestIntent datalatte:summary ?summary. }
+    OPTIONAL { ?latestIntent datalatte:projectDescription ?projDesc. }
+    OPTIONAL { ?latestIntent datalatte:challenge ?challenge. }
+    OPTIONAL { ?latestIntent schema:url ?url. }
+    OPTIONAL { ?latestIntent datalatte:relatedTo ?relatedProject. }
+    OPTIONAL { ?latestIntent datalatte:desiredConnections ?allDesiredConnections }
+  }
+  
+  
+  # Latest Project Timestamp per person
+  OPTIONAL {
+    SELECT ?person (MAX(?pt) AS ?projectTimestamp)
+    WHERE {
+      ?person datalatte:hasProject ?p .
+      ?p rdf:type datalatte:Project ;
+         datalatte:revisionTimestamp ?pt .
+    }
+    GROUP BY ?person
+  }
+  
+  # Latest Project details joined on that timestamp
+  OPTIONAL {
+    ?person datalatte:hasProject ?latestProject .
+    ?latestProject rdf:type datalatte:Project ;
+                   datalatte:revisionTimestamp ?projectTimestamp ;
+                   foaf:name ?projectName ;
+                   schema:description ?projectDescriptionFull ;
+                   datalatte:type ?projectType ;
+                   datalatte:domain ?projectDomain .
+    OPTIONAL { ?latestProject datalatte:techStack ?projectTechStack. }
   }
 }`;
 
@@ -50,6 +107,7 @@ Recent Messages:
 {{recentMessages}}
 
 Existing knowledge related to the person:
+{{existingIntentions}}
 
 
 SHACL Shapes for Validation:
@@ -68,6 +126,14 @@ SHACL Shapes for Validation:
 datalatte:PersonShape
   a sh:NodeShape ;
   sh:targetClass foaf:Person ;
+  
+  # Revision timestamp
+  sh:property [
+      sh:path datalatte:revisionTimestamp ;
+      sh:datatype xsd:dateTime ;
+      sh:minCount 1 ;
+      sh:description "Timestamp of when this node was last revised." ;
+  ] ;
   
   # hasAccount: expects an embedded account node
   sh:property [
@@ -154,6 +220,14 @@ datalatte:IntentShape
   a sh:NodeShape ;
   sh:targetClass datalatte:Intent ;
   
+  # Revision timestamp
+  sh:property [
+    sh:path datalatte:revisionTimestamp ;
+    sh:datatype xsd:dateTime ;
+    sh:minCount 1 ;
+    sh:description "Timestamp of when this intent was last revised." ;
+  ] ;
+  
   sh:property [
     sh:path datalatte:summary ;
     sh:datatype xsd:string ;
@@ -194,6 +268,14 @@ datalatte:ProjectShape
   a sh:NodeShape ;
   sh:targetClass datalatte:Project ;
   
+  # Revision timestamp
+  sh:property [
+    sh:path datalatte:revisionTimestamp ;
+    sh:datatype xsd:dateTime ;
+    sh:minCount 1 ;
+    sh:description "Timestamp of when this project was last revised." ;
+  ] ;
+  
   sh:property [
     sh:path foaf:name ;
     sh:datatype xsd:string ;
@@ -233,8 +315,8 @@ Guidelines:
    - If similar intent/project exists but has new details -> use existing intention/project ID and merge details
    - If completely new intention/project -> use the provided new ID
 2. For existing updates:
-   - Keep all existing fields
-   - Only add or update fields that have new information
+   - Keep all existing fields in the output
+   - Add or update fields that have new information
    - Use the exact ID from the matching existing knowledge asset
 3. For new intents and projects:
    - Use the provided new ID
@@ -257,6 +339,7 @@ Format response as array:
       },
       "@type": "datalatte:Intent",
       "@id": "urn:intent:{{intentid}}",
+      "datalatte:revisionTimestamp": "{{timestamp}}",
       "datalatte:summary": "<Anonymized summary of what the user seeks, e.g., 'Seeking a marketing expert to scale digital outreach'>",
       "datalatte:desiredConnections": [
         "<expertise type1>",
@@ -276,6 +359,7 @@ Format response as array:
       },
       "@type": "foaf:Person",
       "@id": "urn:uuid:{{uuid}}",
+      "datalatte:revisionTimestamp": "{{timestamp}}",
       "foaf:account": {
         "@type": "foaf:OnlineAccount",
         "foaf:accountServiceHomepage": "{{platform}}",
@@ -291,6 +375,7 @@ Format response as array:
       "datalatte:hasProject": {
         "@type": "datalatte:Project",
         "@id": "urn:project:{{projectid}}",
+        "datalatte:revisionTimestamp": "{{timestamp}}",
         "foaf:name": "<Project title, e.g., 'NFT Art Marketplace'>",
         "schema:description": "<Project description summary>",
         "datalatte:type": "<Classification, e.g., 'marketplace', 'protocol', 'DAO tool', 'game', 'platform'>",
@@ -384,19 +469,19 @@ export const publishIntent2Dkg: Action = {
       });
 
       let existingIntentions;
-      existingIntentions = [];      //not doing any query for now
+      //existingIntentions = [];      //not doing any query for now
       try {
         // Add a small delay to allow for DKG indexing if needed
-        await new Promise((resolve) => setTimeout(resolve, 5000));
+        // await new Promise((resolve) => setTimeout(resolve, 5000));
 
-        // const queryResult = await DkgClient.graph.query(existingIntentionsQuery, "SELECT");
-        // elizaLogger.info("Existing intentions query result:", {
-        //   status: queryResult.status,
-        //   dataLength: queryResult.data?.length,
-        //   data: queryResult.data,
-        // });
+         const queryResult = await DkgClient.graph.query(existingIntentionsQuery, "SELECT");
+         elizaLogger.info("Existing intentions query result:", {
+           status: queryResult.status,
+           dataLength: queryResult.data?.length,
+           data: queryResult.data,
+         });
 
-        // existingIntentions = queryResult.data;
+        existingIntentions = queryResult.data;
       } catch (error) {
         elizaLogger.error("Error querying existing intentions:", error);
         existingIntentions = [];
@@ -416,7 +501,8 @@ export const publishIntent2Dkg: Action = {
       state.uuid = message.userId;
       state.platform = platform;
       state.username = username;
-      //state.existingIntentions = JSON.stringify(existingIntentions || [], null, 2);
+      state.timestamp = new Date().toISOString(); // Add current timestamp in ISO format
+      state.existingIntentions = JSON.stringify(existingIntentions || [], null, 2);
 
       elizaLogger.info("Generating JSON-LD with context data:", {
         messageId: message.id,

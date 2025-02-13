@@ -4,44 +4,92 @@ import DKG from "dkg.js";
 
 let DkgClient: any = null;
 
+//TODO; currently sparql query is only getting latest intent ids, but later should get all unique ids and their latest revision timestamp
+
 // SPARQL query to find structured user data
 const USER_DATA_QUERY = `
-PREFIX schema: <http://schema.org/>
+PREFIX schema:    <http://schema.org/>
 PREFIX datalatte: <https://datalatte.com/ns/>
-PREFIX foaf: <http://xmlns.com/foaf/0.1/>
-PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX foaf:      <http://xmlns.com/foaf/0.1/>
+PREFIX rdf:       <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 
-SELECT ?person ?name ?description ?role ?company ?status ?expertise ?intent 
-       (MAX(?intentDesc) AS ?latestDesc)
-       (MAX(?intentDir) AS ?latestDir)
-       (MAX(?intentType) AS ?latestType)
-       (GROUP_CONCAT(?prefs; SEPARATOR=",") AS ?allPrefs)
+SELECT ?person ?name ?background ?knowledgeDomain ?privateDetails ?personTimestamp
+       ?latestIntent ?intentTimestamp ?summary ?allDesiredConnections ?projDesc ?challenge ?url ?relatedProject
+       ?latestProject ?projectTimestamp ?projectName ?projectDescriptionFull ?projectType ?projectDomain ?projectTechStack
 WHERE {
-    ?person rdf:type schema:Person ;
-            foaf:account ?account .
-    ?account a foaf:OnlineAccount ;
-             foaf:accountServiceHomepage "{{platform}}" ;
-             foaf:accountName "{{username}}" .
-             
-    OPTIONAL { ?person schema:name ?name }
-    OPTIONAL { ?person schema:description ?description }
-    OPTIONAL { ?person schema:jobTitle ?role }
-    OPTIONAL { ?person schema:worksFor ?company }
-    OPTIONAL { ?person schema:employmentStatus ?status }
-    OPTIONAL { ?person schema:knowsAbout ?expertise }
-    
-    OPTIONAL {
-        ?person datalatte:hasIntent ?intent .
-        ?intent rdf:type datalatte:intent ;
-                datalatte:intentCategory "professional" ;
-                schema:description ?intentDesc ;
-                datalatte:intentDirection ?intentDir ;
-                datalatte:intentType ?intentType .
-        OPTIONAL { ?intent datalatte:hasPreferences ?prefs }
+  # Person info
+  {
+    SELECT ?person 
+           (MAX(?pTs) AS ?personTimestamp)
+           (MAX(?nameVal) AS ?name)
+           (MAX(?bg) AS ?background)
+           (MAX(?kd) AS ?knowledgeDomain)
+           (MAX(?pd) AS ?privateDetails)
+    WHERE {
+      ?person rdf:type foaf:Person ;
+              foaf:account ?account .
+      ?account a foaf:OnlineAccount ;
+               foaf:accountServiceHomepage "{{platform}}" ;
+               foaf:accountName "{{username}}" .
+      OPTIONAL { ?person foaf:name ?nameVal. }
+      OPTIONAL { ?person datalatte:background ?bg. }
+      OPTIONAL { ?person datalatte:knowledgeDomain ?kd. }
+      OPTIONAL { ?person datalatte:privateDetails ?pd. }
+      OPTIONAL { ?person datalatte:revisionTimestamp ?pTs. }
     }
+    GROUP BY ?person
+  }
+  
+  # Latest Intent Timestamp per person
+  OPTIONAL {
+    SELECT ?person (MAX(?it) AS ?intentTimestamp)
+    WHERE {
+      ?person datalatte:hasIntent ?i .
+      ?i rdf:type datalatte:Intent ;
+         datalatte:intentCategory "professional" ;
+         datalatte:revisionTimestamp ?it .
+    }
+    GROUP BY ?person
+  }
+  
+  # Latest Intent details joined on that timestamp
+  OPTIONAL {
+    ?person datalatte:hasIntent ?latestIntent .
+    ?latestIntent rdf:type datalatte:Intent ;
+                  datalatte:intentCategory "professional" ;
+                  datalatte:revisionTimestamp ?intentTimestamp . 
+    OPTIONAL { ?latestIntent datalatte:summary ?summary. }
+    OPTIONAL { ?latestIntent datalatte:projectDescription ?projDesc. }
+    OPTIONAL { ?latestIntent datalatte:challenge ?challenge. }
+    OPTIONAL { ?latestIntent schema:url ?url. }
+    OPTIONAL { ?latestIntent datalatte:relatedTo ?relatedProject. }
+    OPTIONAL { ?latestIntent datalatte:desiredConnections ?allDesiredConnections }
+  }
+  
+  
+  # Latest Project Timestamp per person
+  OPTIONAL {
+    SELECT ?person (MAX(?pt) AS ?projectTimestamp)
+    WHERE {
+      ?person datalatte:hasProject ?p .
+      ?p rdf:type datalatte:Project ;
+         datalatte:revisionTimestamp ?pt .
+    }
+    GROUP BY ?person
+  }
+  
+  # Latest Project details joined on that timestamp
+  OPTIONAL {
+    ?person datalatte:hasProject ?latestProject .
+    ?latestProject rdf:type datalatte:Project ;
+                   datalatte:revisionTimestamp ?projectTimestamp ;
+                   foaf:name ?projectName ;
+                   schema:description ?projectDescriptionFull ;
+                   datalatte:type ?projectType ;
+                   datalatte:domain ?projectDomain .
+    OPTIONAL { ?latestProject datalatte:techStack ?projectTechStack. }
+  }
 }
-GROUP BY ?person ?name ?description ?role ?company ?status ?expertise ?intent
-ORDER BY DESC(?intent)
 `;
 
 const userProfileProvider: Provider = {
@@ -116,12 +164,11 @@ const userProfileProvider: Provider = {
             };
 
             return `
-Profile for @${username} collected through ${platform} interactions:
-
+Profile history for @${username} collected through ${platform} interactions with DataBarista sofar:
 \`\`\`json
 ${JSON.stringify(jsonLd, null, 2)}
 \`\`\`
-Task: Based on users recent conversation and the avaialble intentions, engage in a natural conversation to ask follow up questions to get information that helps finding a better match for the intent user is looking for currently in the conversation.
+Task: Based on users recent conversation, engage in a natural conversation to ask follow up questions to get information that helps finding a better match for the intent user is looking for currently in the conversation.
 `;
         } catch (error) {
             elizaLogger.error("Error in userProfileProvider:", error);
