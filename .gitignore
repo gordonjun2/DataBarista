@@ -36,10 +36,11 @@ characters/databarista_TG.character.json
 *.ts
 dist
 !index.ts
-!publishProIntent2Dkg.ts
+!publishIntent2Dkg.ts
 !serendipityAction.ts
 !userProfileProvider.ts
 !continueAction.ts
+!noneAction.ts
 
 db.sqlite
 .tee-cloud

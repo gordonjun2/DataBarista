@@ -116,11 +116,12 @@ const userProfileProvider: Provider = {
             };
 
             return `
-Found following information in DKG for @${username} on ${platform}:
+Profile for @${username} collected through ${platform} interactions:
 
 \`\`\`json
 ${JSON.stringify(jsonLd, null, 2)}
 \`\`\`
+Task: Based on users recent conversation and the avaialble intentions, engage in a natural conversation to ask follow up questions to get information that helps finding a better match for the intent user is looking for currently in the conversation.
 `;
         } catch (error) {
             elizaLogger.error("Error in userProfileProvider:", error);
