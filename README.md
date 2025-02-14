@@ -18,6 +18,7 @@ DataBarista is a privacy-preserving AI agent designed to connect people with the
 - [License](#license)
 
 ---
+![databarista-flow](https://github.com/user-attachments/assets/b6a3c70c-faa6-4744-b55e-e16edc615ec3)
 
 ## Overview
 
