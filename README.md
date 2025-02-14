@@ -2,7 +2,7 @@
 
 **“I'm that Barista who remembers your stories & might just know someone you should meet!”**
 
-DataBarista is a privacy-preserving AI agent designed to connect people with the right collaborators and opportunities. It leverages a hybrid knowledge graph (public + private) powered by [OriginTrail DKG](https://origintrail.io/) and the [ElizaOS](https://github.com/eliza-os) framework to securely capture and share matchmaking “intents” without exposing sensitive data.
+DataBarista is a privacy-preserving AI agent designed to connect people with the right collaborators and opportunities. It leverages a hybrid knowledge graph (public + private) powered by [OriginTrail DKG](https://origintrail.io/) and the [ElizaOS](https://github.com/elizaos) framework to securely capture and share matchmaking “intents” without exposing sensitive data.
 
 ---
 
