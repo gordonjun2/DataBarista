@@ -130,23 +130,20 @@ import {
   {{/each}}
   
   Task:
-  From the above candidate profiles, choose the best match that aligns with the user's interests.
-  Generate a concise, friendly social media post (in a modern Twitter/X style) that introduces this best match to the user.
-  The post should:
-  1. Use the proper @usernames for both parties
-  2. Highlight key synergies in their backgrounds and projects
-  3. Mention how they might help solve each other's challenges
-  4. Put into consideration that users might know each other already, so see if the profiles are too close and mention same project names, or other things hinting they work at same place, do not choose the candidate as match.
+From the above candidate profiles, choose the best match that aligns with the user's interests.
+Generate a friendly social media post that introduces the user and the best match together.
+The post should:
+1. Use the proper @username for both user and the best match chosen
+2. Highlight their synergy and how they might help solve each other
+3. Do not use hashtags
+4. Post 500 characters or less
   
-  Output Format:
+  
   Return an array containing a single object with the following structure:
-  [{
-    "post": "Generated social media post text here"
-  }]
-  
+
   Example Output:
   [{
-    "post": "🤝 Exciting match! @exampleuser1 meet @exampleuser2! Both revolutionizing data ownership in their unique ways. user1's human-computer interfaces + user2's data privacy work = perfect synergy for democratizing personal data. Let's brew some innovation! 🚀"
+    "post": "🤝 Exciting match! @user_username meet @match_username! Both revolutionizing data ownership in their unique ways. @user_username's human-computer interfaces + match_username's data privacy work = perfect synergy for democratizing personal data. Let's brew some innovation!"
   }]
   
   Do not include any additional text or explanation outside of the array structure.

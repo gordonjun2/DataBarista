@@ -16,7 +16,6 @@ import { createNodePlugin } from "@elizaos/plugin-node";
 
 import { publishIntent2Dkg } from "./publishIntent2Dkg.ts";
 import { serendipity } from "./serendipityAction.ts";
-import { continueAction } from "./continueAction.ts";
 import { noneAction } from "./noneAction.ts";
 import { userProfileProvider } from "./userProfileProvider.ts";
 import fs from "fs";

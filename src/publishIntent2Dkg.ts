@@ -100,6 +100,166 @@ WHERE {
   }
 }`;
 
+const MATCH_PROMPT_TEMPLATE = `
+MATCHMAKING SOCIAL POST GENERATION TASK
+
+User Profile:
+- Username: @{{username}}
+- Knowledge Domain: {{userKnowledgeDomain}}
+- Project Domain: {{userProjectDomain}}
+- Desired Connections: {{userDesiredConnections}}
+- Project: {{userProjectName}}
+- Project Description: {{userProjectDesc}}
+- Background: {{userBackground}}
+- Challenge: {{userChallenge}}
+
+Candidate Profiles:
+{{#each candidates}}
+[Candidate {{@index}}]
+- Username: @{{this.username}}
+- Expertise: {{this.knowledgeDomain}}
+- Background: {{this.background}}
+- Project Type: {{this.projectType}}
+- Project Name: {{this.projectName}}
+- Project Description: {{this.projectDescription}}
+- Challenge: {{this.challenge}}
+- Desired Connections: {{this.desiredConnections}}
+{{/each}}
+
+Task:
+From the above candidate profiles, choose the best match that aligns with the user's interests.
+Generate a friendly social media post that introduces the user and the best match together.
+The post should:
+1. Use the proper @username for both user and the best match chosen
+2. Highlight their synergy and how they might help solve each other
+3. Do not use hashtags
+4. Post 500 characters or less
+  
+  
+  Return an array containing a single object with the following structure:
+
+  Example Output:
+  [{
+    "post": "🤝 Exciting match! @user_username meet @match_username! Both revolutionizing data ownership in their unique ways. @user_username's human-computer interfaces + match_username's data privacy work = perfect synergy for democratizing personal data. Let's brew some innovation!"
+  }]
+  
+  Do not include any additional text or explanation outside of the array structure.
+`;
+
+async function generateMatchingQuery(
+  runtime: IAgentRuntime,
+  userProfile: any,
+  platform: string,
+  username: string
+): Promise<string> {
+  const context = `
+You are a SPARQL query generator. Your task is to output a JSON array containing one object with a single property "query" whose value is a valid SPARQL query string.
+Do not output any additional text or explanation.
+
+User Profile:
+- Knowledge Domain: ${userProfile.knowledgeDomain}
+- Project Domain: ${userProfile.projectDomain}
+- Desired Connections: ${userProfile.desiredConnections}
+- Project Description: ${userProfile.projDesc || ""}
+- Challenge: ${userProfile.challenge || ""}
+
+Task:
+Generate a SPARQL query that finds matching profiles in the Decentralized Knowledge Graph (DKG) using dynamic filtering.
+The query should:
+1. Exclude the user's own profile (platform: "${platform}", username: "${username}").
+2. Dynamically derive filtering keywords from the user's profile.
+3. Look for candidates where any of the following fields (using OPTIONAL patterns) contain the keywords (case-insensitive): 
+    - datalatte:knowledgeDomain
+    - datalatte:background
+    - datalatte:desiredConnections (bind as ?allDesiredConnections)
+    - datalatte:domain from the related project.
+4. Use COALESCE to default missing values to an empty string in the FILTER.
+5. Order results by the most recent intent timestamp.
+6. Limit the results to 15.
+
+Ensure the SELECT clause includes:
+  ?person, ?name, ?knowledgeDomain, ?background, ?allDesiredConnections, ?projectDomain, ?projectType, ?challenge, ?intentTimestamp, ?projectName, and ?projectDescription
+
+Example Output:
+[{
+  "query": "PREFIX schema: <http://schema.org/> PREFIX datalatte: <https://datalatte.com/ns/> PREFIX foaf: <http://xmlns.com/foaf/0.1/> PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> SELECT DISTINCT ?person ?name ?knowledgeDomain ?background ?allDesiredConnections ?projectDomain ?projectType ?challenge ?intentTimestamp ?projectName ?projectDescription WHERE { { SELECT ?person (MAX(?ts) AS ?intentTimestamp) { ?person datalatte:hasIntent/datalatte:revisionTimestamp ?ts . } GROUP BY ?person } ?person a foaf:Person ; foaf:name ?name . OPTIONAL { ?person datalatte:knowledgeDomain ?knowledgeDomain. } OPTIONAL { ?person datalatte:background ?background. } OPTIONAL { ?person datalatte:hasIntent ?intent. } OPTIONAL { ?intent datalatte:desiredConnections ?allDesiredConnections ; datalatte:challenge ?challenge ; datalatte:relatedTo ?project . OPTIONAL { ?project datalatte:type ?projectType. } OPTIONAL { ?project datalatte:domain ?projectDomain. } OPTIONAL { ?project foaf:name ?projectName. } OPTIONAL { ?project schema:description ?projectDescription. } } FILTER NOT EXISTS { ?person foaf:account [ foaf:accountServiceHomepage \\"${platform}\\"; foaf:accountName \\"${username}\\" ] } FILTER ( CONTAINS(LCASE(COALESCE(STR(?knowledgeDomain), \\"\\")), \\"${userProfile.knowledgeDomain.toLowerCase()}\\" ) || CONTAINS(LCASE(COALESCE(STR(?background), \\"\\")), \\"${userProfile.knowledgeDomain.toLowerCase()}\\" ) || CONTAINS(LCASE(COALESCE(STR(?allDesiredConnections), \\"\\")), \\"${userProfile.desiredConnections.toLowerCase()}\\" ) || CONTAINS(LCASE(COALESCE(STR(?projectDomain), \\"\\")), \\"${userProfile.projectDomain.toLowerCase()}\\" ) ) } ORDER BY DESC(?intentTimestamp) LIMIT 15"
+}]
+`;
+
+  const queryResult = await generateObjectArray({
+    runtime,
+    context,
+    modelClass: ModelClass.LARGE
+  });
+
+  if (!queryResult?.length) {
+    throw new Error("Failed to generate SPARQL query");
+  }
+
+  elizaLogger.info("Generated Query Output:", queryResult);
+  return queryResult[0].query;
+}
+
+async function getMatchingProfiles(
+  runtime: IAgentRuntime,
+  userProfile: any,
+  platform: string,
+  username: string
+) {
+  elizaLogger.info("=== Serendipity Matching Query Parameters ===");
+  elizaLogger.info("User Profile:", {
+    knowledgeDomain: userProfile.knowledgeDomain,
+    projectDomain: userProfile.projectDomain,
+    desiredConnections: userProfile.desiredConnections,
+    platform,
+    username,
+  });
+
+  const sparqlQuery = await generateMatchingQuery(runtime, userProfile, platform, username);
+
+  elizaLogger.info("=== Serendipity Search Query ===");
+  elizaLogger.info(sparqlQuery);
+  elizaLogger.info("=================================");
+
+  try {
+    const result = await DkgClient.graph.query(sparqlQuery, "SELECT");
+    elizaLogger.info("=== Serendipity Search Results ===");
+    elizaLogger.info(`Found ${result.data?.length || 0} potential matches`);
+    if (result.data?.length > 0) {
+      result.data.forEach((match: any, index: number) => {
+        elizaLogger.info(`Match ${index + 1}:`, {
+          name: match.name?.replace(/^"|"$/g, ''),
+          knowledgeDomain: match.knowledgeDomain?.replace(/^"|"$/g, ''),
+          desiredConnections: match.allDesiredConnections?.replace(/^"|"$/g, ''),
+          projectType: match.projectType?.replace(/^"|"$/g, ''),
+          projectDomain: match.projectDomain?.replace(/^"|"$/g, ''),
+          challenge: match.challenge?.replace(/^"|"$/g, '')
+        });
+      });
+    }
+    elizaLogger.info("================================");
+
+    if (!result.data) return [];
+
+    return result.data.map((candidate: any) => ({
+      ...candidate,
+      name: candidate.name?.replace(/^"|"$/g, ''),
+      knowledgeDomain: candidate.knowledgeDomain?.replace(/^"|"$/g, ''),
+      desiredConnections: candidate.allDesiredConnections?.replace(/^"|"$/g, ''),
+      projectType: candidate.projectType?.replace(/^"|"$/g, ''),
+      projectDomain: candidate.projectDomain?.replace(/^"|"$/g, ''),
+      challenge: candidate.challenge?.replace(/^"|"$/g, ''),
+      projectName: candidate.projectName?.replace(/^"|"$/g, ''),
+      projectDescription: candidate.projectDescription?.replace(/^"|"$/g, '')
+    }));
+  } catch (error) {
+    elizaLogger.error("=== Serendipity Search Error ===");
+    elizaLogger.error("SPARQL query failed:", error);
+    elizaLogger.error("=============================");
+    return [];
+  }
+}
+
 const KGExtractionTemplate = `
 TASK: Transform conversation data into valid schema.org/FOAF compliant JSON-LD for professional intentions, considering existing intentions in DKG
 
@@ -609,13 +769,102 @@ export const publishIntent2Dkg: Action = {
         );
         elizaLogger.info("===============================");
 
+        // Send the first callback for successful publishing
         callback({
-          text: `Here's your anonymous intent on DKG ($latte brew will come soon): ${
+          text: `Here's your anonymous intent on DKG: ${
             runtime.getSetting("DKG_ENVIRONMENT") === "mainnet"
               ? "https://dkg.origintrail.io/explore?ual="
               : "https://dkg-testnet.origintrail.io/explore?ual="
-            }${createAssetResult.UAL}. In the meanwhile i get back to you with the match, feel free to tell me more about your project and challenges.`,
+            }${createAssetResult.UAL}. Feel free adding detail while i am checking my network for your match.`,
         });
+
+        // Add a delay to allow DKG indexing
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+
+        // Query for the user's profile including the newly published intent
+        const profileQuery = EXISTING_INTENTIONS_QUERY
+          .replace("{{platform}}", platform)
+          .replace("{{username}}", username);
+
+        elizaLogger.info("=== User Profile Query After Publishing ===");
+        elizaLogger.info(profileQuery);
+        elizaLogger.info("=========================================");
+
+        const profileResult = await DkgClient.graph.query(profileQuery, "SELECT");
+        elizaLogger.info("=== User Profile Result After Publishing ===");
+        elizaLogger.info(JSON.stringify(profileResult.data?.[0] || {}, null, 2));
+        elizaLogger.info("==========================================");
+
+        if (!profileResult.data?.length) {
+          return true; // Already published successfully, so return true even if matching fails
+        }
+
+        const rawProfile = profileResult.data[0];
+        const userProfile = {
+          knowledgeDomain: rawProfile.knowledgeDomain?.replace(/^"|"$/g, ''),
+          projectDomain: rawProfile.projectDomain?.replace(/^"|"$/g, ''),
+          desiredConnections: rawProfile.allDesiredConnections?.replace(/^"|"$/g, ''),
+          intent: rawProfile.latestIntent,
+          challenge: rawProfile.challenge?.replace(/^"|"$/g, ''),
+          projDesc: rawProfile.projDesc?.replace(/^"|"$/g, '')
+        };
+
+        if (!userProfile.knowledgeDomain || !userProfile.projectDomain || !userProfile.desiredConnections) {
+          return true; // Already published successfully, so return true even if matching fails
+        }
+
+        const candidates = await getMatchingProfiles(runtime, userProfile, platform, username);
+        if (!candidates.length) {
+          callback({ text: "No matches found yet. I'll keep searching!" });
+          return true;
+        }
+
+        // Prepare LLM context for generating a social media post
+        if (!state) {
+          state = await runtime.composeState(message);
+        }
+        state = {
+          ...state,
+          username: username,
+          userKnowledgeDomain: userProfile.knowledgeDomain,
+          userProjectDomain: userProfile.projectDomain,
+          userDesiredConnections: userProfile.desiredConnections,
+          userProjectName: rawProfile.projectName?.replace(/^"|"$/g, ''),
+          userProjectDesc: userProfile.projDesc,
+          userBackground: rawProfile.background?.replace(/^"|"$/g, ''),
+          userChallenge: userProfile.challenge,
+          candidates: candidates.map(c => ({
+            ...c,
+            username: c.username || c.name?.toLowerCase().replace(/\s+/g, '') || 'user',
+            knowledgeDomain: c.knowledgeDomain?.replace(/^"|"$/g, ''),
+            background: c.background?.replace(/^"|"$/g, ''),
+            projectName: c.projectName?.replace(/^"|"$/g, ''),
+            projectDescription: c.projectDescription?.replace(/^"|"$/g, ''),
+            challenge: c.challenge?.replace(/^"|"$/g, ''),
+            desiredConnections: c.desiredConnections?.replace(/^"|"$/g, '')
+          }))
+        };
+
+        const context = composeContext({
+          template: MATCH_PROMPT_TEMPLATE,
+          state
+        });
+
+        // Generate the post text from the candidate profiles
+        const postResult = await generateObjectArray({
+          runtime,
+          context,
+          modelClass: ModelClass.LARGE
+        });
+
+        if (!postResult?.length) {
+          callback({ text: "Found matches but couldn't generate the post. Please try again later!" });
+          return true;
+        }
+
+        // Extract the post text from the result array and send the second callback
+        const postMessage = postResult[0]?.post || "Found matches but couldn't format the message properly. Please try again!";
+        callback({ text: postMessage });
 
         return true;
       } catch (error) {
