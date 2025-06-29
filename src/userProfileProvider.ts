@@ -93,88 +93,88 @@ WHERE {
 `;
 
 const userProfileProvider: Provider = {
-    get: async (runtime: IAgentRuntime, message: Memory, state?: State): Promise<string | null> => {
-        try {
-            // Initialize DKG client if needed
-            if (!DkgClient) {
-                DkgClient = new DKG({
-                    environment: runtime.getSetting("DKG_ENVIRONMENT"),
-                    endpoint: runtime.getSetting("DKG_HOSTNAME"),
-                    port: runtime.getSetting("DKG_PORT"),
-                    blockchain: {
-                        name: runtime.getSetting("DKG_BLOCKCHAIN_NAME"),
-                        publicKey: runtime.getSetting("DKG_PUBLIC_KEY"),
-                        privateKey: runtime.getSetting("DKG_PRIVATE_KEY"),
-                    },
-                    maxNumberOfRetries: 300,
-                    frequency: 2,
-                    contentType: "all",
-                    nodeApiVersion: "/v1",
-                });
-            }
+  get: async (runtime: IAgentRuntime, message: Memory, state?: State): Promise<string | null> => {
+    try {
+      // Initialize DKG client if needed
+      if (!DkgClient) {
+        DkgClient = new DKG({
+          environment: runtime.getSetting("DKG_ENVIRONMENT"),
+          endpoint: runtime.getSetting("DKG_HOSTNAME"),
+          port: runtime.getSetting("DKG_PORT"),
+          blockchain: {
+            name: runtime.getSetting("DKG_BLOCKCHAIN_NAME"),
+            publicKey: runtime.getSetting("DKG_PUBLIC_KEY"),
+            privateKey: runtime.getSetting("DKG_PRIVATE_KEY"),
+          },
+          maxNumberOfRetries: 300,
+          frequency: 2,
+          contentType: "all",
+          nodeApiVersion: "/v1",
+        });
+      }
 
-            const username = state?.senderName || message.userId;
-            
-            // Get platform type from client
-            const clients = runtime.clients;
-            const client = Object.values(clients)[0];
-            let platform = client?.constructor?.name?.replace('ClientInterface', '').toLowerCase();
-            if (platform?.endsWith('client')) {
-                platform = platform.replace('client', '');
-            }
+      const username = state?.senderName || message.userId;
 
-            elizaLogger.info("Checking DKG for user data:", {
-                username,
-                platform,
-                clientType: client?.constructor?.name
-            });
+      // Get platform type from client
+      const clients = runtime.clients;
+      const client = Object.values(clients)[0];
+      let platform = client?.constructor?.name?.replace('ClientInterface', '').toLowerCase();
+      if (platform?.endsWith('client')) {
+        platform = platform.replace('client', '');
+      }
 
-            // Query for user data
-            const userDataQuery = USER_DATA_QUERY
-                .replace("{{platform}}", platform)
-                .replace("{{username}}", username);
+      elizaLogger.info("Checking DKG for user data:", {
+        username,
+        platform,
+        clientType: client?.constructor?.name
+      });
 
-            let userData;
-            try {
-                const queryResult = await DkgClient.graph.query(userDataQuery, "SELECT");
-                elizaLogger.info("User data query result:", {
-                    status: queryResult.status,
-                    data: queryResult.data
-                });
-                
-                userData = queryResult.data;
-            } catch (error) {
-                elizaLogger.error("Error querying user data:", error);
-                return null;
-            }
+      // Query for user data
+      const userDataQuery = USER_DATA_QUERY
+        .replace("{{platform}}", platform)
+        .replace("{{username}}", username);
 
-            // If no data found
-            if (!userData || userData.length === 0) {
-                return `No profile information found in DKG for @${username} on ${platform}.`;
-            }
+      let userData;
+      try {
+        const queryResult = await DkgClient.graph.query(userDataQuery, "SELECT");
+        elizaLogger.info("User data query result:", {
+          status: queryResult.status,
+          data: queryResult.data
+        });
 
-            // Format the found data as JSON-LD
-            const jsonLd = {
-                "@context": {
-                    "schema": "http://schema.org/",
-                    "datalatte": "https://datalatte.com/ns/",
-                    "foaf": "http://xmlns.com/foaf/0.1/"
-                },
-                "@graph": userData
-            };
+        userData = queryResult.data;
+      } catch (error) {
+        elizaLogger.error("Error querying user data:", error);
+        return null;
+      }
 
-            return `
+      // If no data found
+      if (!userData || userData.length === 0) {
+        return `No profile information found in DKG for @${username} on ${platform}.`;
+      }
+
+      // Format the found data as JSON-LD
+      const jsonLd = {
+        "@context": {
+          "schema": "http://schema.org/",
+          "datalatte": "https://datalatte.com/ns/",
+          "foaf": "http://xmlns.com/foaf/0.1/"
+        },
+        "@graph": userData
+      };
+
+      return `
 Profile history for @${username} collected through ${platform} interactions with DataBarista sofar:
 \`\`\`json
 ${JSON.stringify(jsonLd, null, 2)}
 \`\`\`
 Task: Based on users recent conversation, engage in a natural conversation to ask follow up questions to get information that helps finding a better match for the intent user is looking for currently in the conversation.
 `;
-        } catch (error) {
-            elizaLogger.error("Error in userProfileProvider:", error);
-            return null;
-        }
+    } catch (error) {
+      elizaLogger.error("Error in userProfileProvider:", error);
+      return null;
     }
+  }
 };
 
 export { userProfileProvider }; 

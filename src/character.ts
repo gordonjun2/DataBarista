@@ -1,7 +1,14 @@
-import { Character, Clients, defaultCharacter, ModelProviderName } from "@elizaos/core";
+import { Character, Clients, defaultCharacter, ModelProviderName, settings } from "@elizaos/core";
+import { readFileSync } from "fs";
+import { join } from "path";
+
+const characterPath = join(process.cwd(), "characters", settings.CHARACTER_FILE || "databarista.character.json");
+const characterRaw = JSON.parse(readFileSync(characterPath, "utf-8"));
 
 export const character: Character = {
-    ...defaultCharacter,
+    ...characterRaw,
+    modelProvider: ModelProviderName.OPENAI
+    // ...defaultCharacter,
     // name: "Eliza",
     // plugins: [],
     // clients: [],
