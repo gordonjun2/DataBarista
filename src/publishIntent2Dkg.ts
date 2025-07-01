@@ -634,12 +634,12 @@ export const publishIntent2Dkg: Action = {
         // Add a small delay to allow for DKG indexing if needed
         // await new Promise((resolve) => setTimeout(resolve, 5000));
 
-         const queryResult = await DkgClient.graph.query(existingIntentionsQuery, "SELECT");
-         elizaLogger.info("Existing intentions query result:", {
-           status: queryResult.status,
-           dataLength: queryResult.data?.length,
-           data: queryResult.data,
-         });
+        const queryResult = await DkgClient.graph.query(existingIntentionsQuery, "SELECT");
+        elizaLogger.info("Existing intentions query result:", {
+          status: queryResult.status,
+          dataLength: queryResult.data?.length,
+          data: queryResult.data,
+        });
 
         existingIntentions = queryResult.data;
       } catch (error) {
@@ -761,20 +761,18 @@ export const publishIntent2Dkg: Action = {
         elizaLogger.info("=== Knowledge Asset Created ===");
         elizaLogger.info(`UAL: ${createAssetResult.UAL}`);
         elizaLogger.info(
-          `DKG Explorer Link: ${
-            runtime.getSetting("DKG_ENVIRONMENT") === "mainnet"
-              ? "https://dkg.origintrail.io/explore?ual="
-              : "https://dkg-testnet.origintrail.io/explore?ual="
+          `DKG Explorer Link: ${runtime.getSetting("DKG_ENVIRONMENT") === "mainnet"
+            ? "https://dkg.origintrail.io/explore?ual="
+            : "https://dkg-testnet.origintrail.io/explore?ual="
           }${createAssetResult.UAL}`
         );
         elizaLogger.info("===============================");
 
         // Send the first callback for successful publishing
         callback({
-          text: `Here's your anonymous intent on DKG: ${
-            runtime.getSetting("DKG_ENVIRONMENT") === "mainnet"
-              ? "https://dkg.origintrail.io/explore?ual="
-              : "https://dkg-testnet.origintrail.io/explore?ual="
+          text: `Here's your anonymous intent on DKG: ${runtime.getSetting("DKG_ENVIRONMENT") === "mainnet"
+            ? "https://dkg.origintrail.io/explore?ual="
+            : "https://dkg-testnet.origintrail.io/explore?ual="
             }${createAssetResult.UAL}. Feel free adding detail while i am checking my network for your match.`,
         });
 
