@@ -1,10 +1,12 @@
 > **Note**: If you encounter a `better-sqlite3` error with message "Error: Could not locate the bindings file", please refer to the troubleshooting guide in [this issue](https://github.com/elizaOS/eliza/issues/2360).
 
+> **Note for VPS Users**: When running on a VPS or remote server, make sure to set the `SERVER_HOST` environment variable to your server's IP or domain name. The default `localhost` setting only works for local development.
+
 ---
 
 # DataBarista
 
-**“I'm that Barista who remembers your stories & might just know someone you should meet!”**
+**"I'm that Barista who remembers your stories & might just know someone you should meet!"**
 
 DataBarista is a privacy-preserving AI agent designed to connect people with the right collaborators and opportunities. It leverages a hybrid knowledge graph (public + private) powered by [OriginTrail DKG](https://origintrail.io/) and the [ElizaOS](https://github.com/elizaos) framework to securely capture and share matchmaking "intents" without exposing sensitive data.
 
@@ -30,7 +32,7 @@ DataBarista is a privacy-preserving AI agent designed to connect people with the
 
 Traditional networking—online or at meetups—often yields superficial interactions or irrelevant connections. DataBarista changes this by:
 
-1. **Conversing naturally** to understand a user’s project, challenges, and goals.
+1. **Conversing naturally** to understand a user's project, challenges, and goals.
 2. **Extracting knowledge** into a structured, hybrid knowledge graph.
 3. **Publishing anonymized intents** publicly so others can discover collaboration opportunities.
 4. **Protecting private details** in an edge node accessible only to DataBarista.
@@ -42,7 +44,7 @@ This approach ensures that valuable signals are public (so matches can find you)
 ## Key Features
 
 - **Hybrid Public-Private Knowledge Graph**  
-  Publicly stores anonymous user “intents” while privately storing personal data and project details.
+  Publicly stores anonymous user "intents" while privately storing personal data and project details.
 
 - **Semantic Matchmaking**  
   Uses SPARQL queries and rule-based filtering to find relevant profiles from the decentralized knowledge graph.
@@ -60,7 +62,7 @@ This approach ensures that valuable signals are public (so matches can find you)
 
 ## Architecture
 
-Below is a high-level illustration of DataBarista’s flow:
+Below is a high-level illustration of DataBarista's flow:
 
 ```
    ┌─────────────────────────────────────┐
@@ -69,7 +71,7 @@ Below is a high-level illustration of DataBarista’s flow:
                 │
                 ▼
    ┌─────────────────────────────────────┐
-   │  DataBarista’s Network             │
+   │  DataBarista's Network             │
    │  (Private Edge Node + Public DKG)  │
    └─────────────────────────────────────┘
                 │
@@ -96,12 +98,12 @@ Below is a high-level illustration of DataBarista’s flow:
 
 1. **Conversation & Data Extraction**
 
-   - DataBarista engages in a chat-like dialogue, gathering details about the user’s goals, project, and challenges.
+   - DataBarista engages in a chat-like dialogue, gathering details about the user's goals, project, and challenges.
    - A knowledge extraction pipeline transforms these details into triplets (using custom schemas like `datalatte:Intent`, `datalatte:Project`, etc.).
 
 2. **Public vs. Private Storage**
 
-   - **Public**: Anonymized “intent” data (e.g., “Looking for a marketing expert”) is published to the OriginTrail DKG, making it discoverable and verifiable.
+   - **Public**: Anonymized "intent" data (e.g., "Looking for a marketing expert") is published to the OriginTrail DKG, making it discoverable and verifiable.
    - **Private**: Sensitive info (user background, full project details) is stored on a private edge node accessible only to DataBarista.
 
 3. **Semantic Matchmaking**
@@ -129,7 +131,14 @@ Below is a high-level illustration of DataBarista’s flow:
    npm install
    ```
 
-3. **Set Environment Variables**
+3. **Set Environment Variables**  
+   Create a `.env` file with the following variables:
+
+   ```env
+   SERVER_PORT=3000              # Port to run the server on
+   SERVER_HOST=localhost         # Use your VPS IP/domain when running on a server
+   # ... other environment variables ...
+   ```
 
 4. **Run the Agent**
    ```bash
@@ -144,12 +153,12 @@ Below is a high-level illustration of DataBarista’s flow:
 - **Action: `publishIntent2DKG`**  
   Main entry point for publishing a new user intent. It:
 
-  1. Queries existing data in the DKG to see if there’s already a matching intent.
+  1. Queries existing data in the DKG to see if there's already a matching intent.
   2. If new or updated, publishes anonymized intent data publicly and private user data to the edge node.
   3. Performs a semantic match and, if successful, posts an introduction for both parties.
 
 - **Twitter Integration**  
-  Configure a Twitter client so DataBarista can listen for relevant tweets. This data feeds the agent’s knowledge graph for more accurate, real-time matchmaking.
+  Configure a Twitter client so DataBarista can listen for relevant tweets. This data feeds the agent's knowledge graph for more accurate, real-time matchmaking.
 
 - **SPARQL Queries**  
   SPARQL is used to fetch and match user profiles based on domains, challenges, and desired connections. See `EXISTING_INTENTIONS_QUERY` and `generateMatchingQuery` for details.
@@ -171,7 +180,7 @@ Below is a high-level illustration of DataBarista’s flow:
 
 ## Contributing
 
-Contributions are welcome! If you have suggestions for new features, improvements, or bug fixes, please open an issue or submit a pull request. For major changes, consider discussing them first to ensure alignment with the project’s goals.
+Contributions are welcome! If you have suggestions for new features, improvements, or bug fixes, please open an issue or submit a pull request. For major changes, consider discussing them first to ensure alignment with the project's goals.
 
 ---
 
